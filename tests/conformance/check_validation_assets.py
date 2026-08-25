@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Validate standards and physical-validation artifacts for repository CI."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+MATRIX = ROOT / "docs/conformance/iso15765_iso14229_matrix.md"
+PROFILE = ROOT / "docs/physical_validation/board_profile.yaml"
+PLAN = ROOT / "tests/physical/hil_test_plan.json"
+VECTORS = ROOT / "tests/conformance/conformance_vectors.json"
+
+
+def main() -> int:
+    matrix = MATRIX.read_text(encoding="utf-8")
+    required_matrix_tokens = (
+        "ISO-TP transport matrix",
+        "ISO 14229-1 UDS matrix",
+        "HOST-COVERED",
+        "TARGET-CROSS-BUILD",
+        "PHYSICAL-HIL",
+        "REVIEW-REQUIRED",
+        "0xF1–0xF9",
+        "References",
+        "https://www.iso.org/standard/66574.html",
+        "https://www.iso.org/standard/72439.html",
+    )
+    missing = [token for token in required_matrix_tokens if token not in matrix]
+    if missing:
+        raise SystemExit(f"conformance matrix missing required content: {missing}")
+
+    profile = PROFILE.read_text(encoding="utf-8")
+    required_profile_tokens = (
+        "STM32F767",
+        "CAN1 bxCAN",
+        "0x7E0",
+        "0x7E8",
+        "termination_ohms",
+        "destructive_tests_enabled: false",
+        "download_flash_tests_enabled: false",
+    )
+    missing = [token for token in required_profile_tokens if token not in profile]
+    if missing:
+        raise SystemExit(f"board profile missing required content: {missing}")
+
+    vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
+    if vectors.get("schema_version") != 1 or not vectors.get("vectors"):
+        raise SystemExit("conformance vector file is empty or has an unsupported schema")
+    allowed_targets = {
+        "uds_iso_tp_isotp_contract",
+        "uds_iso_tp_uds_contract",
+        "uds_iso_tp_endpoint_contract",
+        "uds_iso_tp_adapters_contract",
+    }
+    vector_ids = [vector.get("id") for vector in vectors["vectors"]]
+    if len(vector_ids) != len(set(vector_ids)) or any(not vector_id for vector_id in vector_ids):
+        raise SystemExit("conformance vector IDs must be unique and non-empty")
+    for vector in vectors["vectors"]:
+        if vector.get("test_target") not in allowed_targets:
+            raise SystemExit(f"unknown conformance test target: {vector.get('test_target')}")
+        if "stimulus" not in vector or "expected" not in vector:
+            raise SystemExit(f"incomplete conformance vector: {vector.get('id')}")
+
+    plan = json.loads(PLAN.read_text(encoding="utf-8"))
+    if plan.get("schema_version") != 1:
+        raise SystemExit("unsupported HIL plan schema")
+    profiles = plan.get("profiles", {})
+    for name in ("classic-can", "can-fd"):
+        if name not in profiles:
+            raise SystemExit(f"HIL plan missing profile: {name}")
+    cases = plan.get("cases", [])
+    if not cases:
+        raise SystemExit("HIL plan contains no cases")
+    case_ids = [case.get("id") for case in cases]
+    if len(case_ids) != len(set(case_ids)) or any(not case_id for case_id in case_ids):
+        raise SystemExit("HIL plan case IDs must be unique and non-empty")
+    if not any(case.get("destructive") for case in cases):
+        raise SystemExit("HIL plan must retain explicitly marked destructive cases")
+    if plan.get("required_evidence", []) == []:
+        raise SystemExit("HIL plan must define required evidence")
+    print(f"validation assets OK: {len(vectors['vectors'])} conformance vectors, {len(cases)} physical cases")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -94,18 +96,43 @@ def run_live(results: list[Evidence], channel: str, bitrate: int, data_bitrate: 
         bus.shutdown()
 
 
-def write_reports(results: list[Evidence], json_path: Path | None, csv_path: Path | None,
-                  report_path: Path | None) -> None:
+def provenance(board_profile: Path | None, analyzer: str, trace: Path | None) -> dict[str, object]:
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        commit = "unknown"
+    values: dict[str, object] = {
+        "repository_commit": commit,
+        "board_profile": str(board_profile) if board_profile else "not-specified",
+        "analyzer": analyzer,
+        "trace": str(trace) if trace else "not-attached",
+        "trace_sha256": "not-attached",
+    }
+    if trace:
+        values["trace_sha256"] = hashlib.sha256(trace.read_bytes()).hexdigest()
+    if board_profile:
+        values["board_profile_sha256"] = hashlib.sha256(board_profile.read_bytes()).hexdigest()
+    else:
+        values["board_profile_sha256"] = "not-specified"
+    return values
+
+
+def write_reports(results: list[Evidence], metadata: dict[str, object], json_path: Path | None,
+                  csv_path: Path | None, report_path: Path | None) -> None:
     values = [asdict(result) for result in results]
     if json_path:
-        json_path.write_text(json.dumps({"results": values}, indent=2) + "\n", encoding="utf-8")
+        json_path.write_text(json.dumps({"metadata": metadata, "results": values}, indent=2) + "\n", encoding="utf-8")
     if csv_path:
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(values[0]))
             writer.writeheader()
             writer.writerows(values)
     if report_path:
-        lines = ["# UDS/ISO-TP HIL report", "", "| Name | Profile | CAN ID | Format | DLC | Verdict |", "|---|---|---|---|---:|---|"]
+        lines = ["# UDS/ISO-TP HIL report", "", "## Provenance", "", "| Field | Value |", "|---|---|"]
+        lines += [f"| {key} | {value} |" for key, value in metadata.items()]
+        lines += ["", "| Name | Profile | CAN ID | Format | DLC | Verdict |", "|---|---|---|---|---:|---|"]
         lines += [f"| {r.name} | {r.profile} | {r.can_id} | {r.frame_format} | {r.dlc} | {r.verdict} |" for r in results]
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -118,6 +145,9 @@ def main() -> int:
     parser.add_argument("--can-fd", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-destructive", action="store_true")
+    parser.add_argument("--board-profile", type=Path)
+    parser.add_argument("--analyzer", default="not-specified")
+    parser.add_argument("--trace", type=Path)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--report", type=Path)
@@ -126,13 +156,18 @@ def main() -> int:
         parser.error("live CAN-FD mode requires --data-bitrate")
     if args.allow_destructive and not args.dry_run:
         print("WARNING: destructive cases enabled", file=sys.stderr)
+    if args.board_profile and not args.board_profile.is_file():
+        parser.error("--board-profile must point to an existing file")
+    if args.trace and not args.trace.is_file():
+        parser.error("--trace must point to an existing file")
+    metadata = provenance(args.board_profile, args.analyzer, args.trace)
     results = inventory(args.can_fd)
     if args.dry_run:
         for result in results:
             result.verdict = "DRY_RUN"
     else:
         run_live(results, args.interface, args.bitrate, args.data_bitrate, args.allow_destructive)
-    write_reports(results, args.json, args.csv, args.report)
+    write_reports(results, metadata, args.json, args.csv, args.report)
     print(json.dumps({"profile": "can-fd" if args.can_fd else "classic-can", "cases": len(results),
                       "verdicts": sorted({result.verdict for result in results})}, indent=2))
     return 0

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "campaign": "uds_iso_tp_physical_hil",
+  "status": "ready_for_operator_hardware",
+  "evidence_class": "physical-hil",
+  "profiles": {
+    "classic-can": {
+      "target": "STM32F767 bxCAN",
+      "frame_format": "Classical CAN",
+      "request_can_id": "0x7E0",
+      "response_can_id": "0x7E8",
+      "nominal_bitrate_bps": 500000,
+      "data_bitrate_bps": null,
+      "bitrate_switch": false,
+      "max_data_length": 8
+    },
+    "can-fd": {
+      "target": "Selected FDCAN-capable STM32",
+      "frame_format": "CAN FD",
+      "request_can_id": "0x7E0",
+      "response_can_id": "0x7E8",
+      "nominal_bitrate_bps": null,
+      "data_bitrate_bps": null,
+      "bitrate_switch": null,
+      "max_data_length": 64
+    }
+  },
+  "preconditions": [
+    "board_profile.yaml is complete and reviewed",
+    "two 120-ohm end terminations are verified",
+    "transceiver power, standby, and pin mapping are verified",
+    "independent analyzer/tester is configured",
+    "firmware image and recovery path are recorded",
+    "destructive_tests_enabled is false for initial bring-up"
+  ],
+  "cases": [
+    {"id": "TP-003-SF", "kind": "transport", "name": "single_frame_boundaries", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-004-MF", "kind": "transport", "name": "first_and_consecutive_frames", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-005-EXTFF", "kind": "transport", "name": "extended_first_frame_over_4095", "profiles": ["can-fd"], "destructive": false},
+    {"id": "TP-006-CTS", "kind": "flow_control", "name": "clear_to_send", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-007-WAIT", "kind": "flow_control", "name": "bounded_wait", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-008-OVFL", "kind": "flow_control", "name": "overflow_abort", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-009-BS", "kind": "flow_control", "name": "block_size_zero_and_nonzero", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-010-STMIN", "kind": "timing", "name": "stmin_valid_and_reserved", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-012-MALFORMED", "kind": "robustness", "name": "wrong_id_dlc_pci", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-013-TIMEOUT", "kind": "timing", "name": "tx_rx_timeout", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-001-10", "kind": "uds", "name": "session_control", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-004-22", "kind": "uds", "name": "read_data_by_identifier", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-005-27", "kind": "uds", "name": "security_access_test_policy", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-008-31", "kind": "uds", "name": "routine_control_policy", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-013-NRC", "kind": "uds", "name": "negative_response_mapping", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "UDS-009-34", "kind": "destructive", "name": "request_download", "profiles": ["classic-can", "can-fd"], "destructive": true},
+    {"id": "UDS-010-36", "kind": "destructive", "name": "transfer_data", "profiles": ["classic-can", "can-fd"], "destructive": true},
+    {"id": "UDS-002-11", "kind": "destructive", "name": "ecu_reset", "profiles": ["classic-can", "can-fd"], "destructive": true}
+  ],
+  "required_evidence": [
+    "raw timestamped trace",
+    "trace sha256",
+    "firmware sha256",
+    "board and transceiver identifiers",
+    "analyzer and tool versions",
+    "nominal and data timing configuration",
+    "measured request-to-response latency",
+    "measured inter-consecutive-frame spacing",
+    "per-case verdict and reviewer"
+  ]
+}

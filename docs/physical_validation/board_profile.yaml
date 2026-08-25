@@ -1,0 +1,52 @@
+schema_version: 1
+campaign_id: "TBD"
+operator: "TBD"
+date_utc: "TBD"
+
+classical_can_target:
+  status: "ready-for-hardware"
+  mcu: "STM32F767"
+  board: "TBD exact board and revision"
+  peripheral: "CAN1 bxCAN"
+  transceiver: "TBD part and operating mode"
+  can_pins:
+    rx: "PI9"
+    tx: "PA12"
+  nominal_bitrate_bps: 500000
+  data_bitrate_bps: null
+  bitrate_switch: false
+  request_can_id: "0x7E0"
+  response_can_id: "0x7E8"
+  addressing: "11-bit normal addressing"
+  termination_ohms: "TBD; verify two 120-ohm end terminations"
+  power_and_ground: "TBD"
+  peer_interface: "TBD independent CAN tester or analyzer"
+
+can_fd_target:
+  status: "requires-selected-board"
+  mcu: "TBD FDCAN-capable STM32"
+  board: "TBD exact board and revision"
+  peripheral: "TBD FDCAN instance"
+  transceiver: "TBD CAN-FD transceiver and mode"
+  nominal_bitrate_bps: null
+  data_bitrate_bps: null
+  bitrate_switch: null
+  request_can_id: "0x7E0"
+  response_can_id: "0x7E8"
+  addressing: "11-bit normal addressing unless separately approved"
+  message_ram_configuration: "TBD generated HAL configuration"
+  filters: "TBD generated HAL configuration"
+  peer_interface: "TBD CAN-FD tester or analyzer"
+
+software:
+  firmware_commit: "TBD"
+  toolchain: "TBD arm-none-eabi-gcc version"
+  hal_revision: "TBD STM32CubeF7 or selected family package"
+  linker_script: "TBD"
+
+safety:
+  destructive_tests_enabled: false
+  download_flash_tests_enabled: false
+  reset_tests_enabled: false
+  signed_test_plan: false
+  recovery_method: "TBD SWD/debug/recovery path"

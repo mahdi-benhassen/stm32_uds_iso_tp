@@ -11,6 +11,8 @@ on:
       - 'cmake/**'
       - 'tests/standalone/**'
       - 'tests/architecture/**'
+      - 'tests/conformance/**'
+      - 'tests/physical/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -28,6 +30,8 @@ on:
       - 'cmake/**'
       - 'tests/standalone/**'
       - 'tests/architecture/**'
+      - 'tests/conformance/**'
+      - 'tests/physical/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -49,6 +53,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy cppcheck ninja-build gcc-arm-none-eabi binutils-arm-none-eabi
       - name: Architecture check
         run: python3 tests/architecture/check_standalone_architecture.py
+      - name: Conformance and physical-plan asset check
+        run: python3 tests/conformance/check_validation_assets.py
       - name: STM32F767 root cross-build
         run: |
           cmake -S . -B build/stm32f767 -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake -DCMAKE_BUILD_TYPE=Debug
@@ -65,7 +71,7 @@ jobs:
           cmake -S library -B build/coverage -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DCMAKE_C_FLAGS='--coverage -O0 -g'
           cmake --build build/coverage --parallel
           ctest --test-dir build/coverage --output-on-failure
-          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\\.c' --gcov-ignore-errors all --txt
+          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\.c' --gcov-ignore-errors all --txt
       - name: Sanitizer build and test
         run: |
           cmake -S library -B build/sanitize -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=OFF -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g'
@@ -81,5 +87,5 @@ jobs:
         run: |
           python3 -m py_compile tests/standalone/run_uds_iso_tp_hil.py
           mkdir -p build/reports
-          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --json build/reports/classic.json --csv build/reports/classic.csv --report build/reports/classic.md
-          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --can-fd --json build/reports/fd.json --csv build/reports/fd.csv --report build/reports/fd.md
+          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --board-profile docs/physical_validation/board_profile.yaml --analyzer ci-dry-run --json build/reports/classic.json --csv build/reports/classic.csv --report build/reports/classic.md
+          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --can-fd --board-profile docs/physical_validation/board_profile.yaml --analyzer ci-dry-run --json build/reports/fd.json --csv build/reports/fd.csv --report build/reports/fd.md

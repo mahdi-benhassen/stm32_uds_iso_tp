@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "evidence_boundary": "host-contract-tests",
+  "vectors": [
+    {
+      "id": "TP-003-CLASSIC-SF",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"payload_hex": "22F190"},
+      "expected": {"frame_data_hex_prefix": "03", "frame_dlc": 4, "result": "complete"}
+    },
+    {
+      "id": "TP-003-FD-SF-62",
+      "profile": "can-fd",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"payload_length": 62, "data_length": 64},
+      "expected": {"pci_prefix": "00", "length_byte": 62, "result": "single_frame"}
+    },
+    {
+      "id": "TP-004-CLASSIC-MF",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_uds_contract",
+      "stimulus": {"payload_length": 20, "sequence": [1, 2, 3]},
+      "expected": {"result": "complete", "payload_preserved": true}
+    },
+    {
+      "id": "TP-005-FD-EXTFF",
+      "profile": "can-fd",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"payload_length": 5000, "extended_length_hex": "00001388"},
+      "expected": {"first_frame_prefix": "1000", "result": "complete"}
+    },
+    {
+      "id": "TP-006-CTS",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"flow_status": "CTS", "block_size": 2, "st_min": "00"},
+      "expected": {"tx_state": "SEND_CONSECUTIVE", "result": "accepted"}
+    },
+    {
+      "id": "TP-007-WAIT-BOUND",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"flow_status": "WAIT", "wait_frames": 3, "max_wait_frames": 2},
+      "expected": {"result": "flow_control_error", "tx_state": "IDLE"}
+    },
+    {
+      "id": "TP-008-OVERFLOW",
+      "profile": "can-fd",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"flow_status": "OVERFLOW"},
+      "expected": {"result": "flow_control_error", "tx_state": "IDLE"}
+    },
+    {
+      "id": "TP-009-BS",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"block_size": 2, "consecutive_frames": 2},
+      "expected": {"tx_state": "WAIT_BLOCK_FLOW_CONTROL", "result": "accepted"}
+    },
+    {
+      "id": "TP-010-STMIN-RESERVED",
+      "profile": "can-fd",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"st_min": "80"},
+      "expected": {"result": "flow_control_error", "tx_state": "IDLE"}
+    },
+    {
+      "id": "TP-011-WRONG-ID",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"flow_control_can_id": "0x7E1", "expected_can_id": "0x7E0"},
+      "expected": {"result": "argument_error", "tx_state": "WAIT_FIRST_FLOW_CONTROL"}
+    },
+    {
+      "id": "TP-013-TIMEOUT",
+      "profile": "classic-can",
+      "test_target": "uds_iso_tp_isotp_contract",
+      "stimulus": {"timeout_ms": 10, "tick_ms": 10},
+      "expected": {"result": "timeout", "tx_state": "IDLE"}
+    },
+    {
+      "id": "UDS-004-RDBI",
+      "profile": "transport-neutral",
+      "test_target": "uds_iso_tp_uds_contract",
+      "stimulus": {"request_hex": "22F190"},
+      "expected": {"response_prefix": "62F190", "result": "positive_response"}
+    },
+    {
+      "id": "UDS-013-UNSUPPORTED",
+      "profile": "transport-neutral",
+      "test_target": "uds_iso_tp_uds_contract",
+      "stimulus": {"request_hex": "99"},
+      "expected": {"response_hex_prefix": "7F9911", "result": "negative_response"}
+    }
+  ]
+}
