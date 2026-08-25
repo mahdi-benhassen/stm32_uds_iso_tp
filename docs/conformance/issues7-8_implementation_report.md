@@ -1,4 +1,4 @@
-# Issues #7 and #8 implementation report
+# Issues #7, #8, #10, and #12 implementation report
 
 ## Executive summary
 
@@ -195,19 +195,20 @@ The final local validation run passed:
 
 | Gate | Result |
 |---|---|
-| Architecture check | PASS; 180 tracked paths |
-| Validation-asset check | PASS; 13 conformance vectors and 18 physical cases |
+| Architecture check | PASS; 183 tracked paths |
+| Validation-asset check | PASS; 13 conformance vectors and 20 physical cases |
 | Normal CMake/Ninja build | PASS |
 | Normal CTest | PASS; 6/6 suites with adapter examples enabled; 5/5 core suites with examples disabled |
-| ASan/UBSan build and CTest | PASS; 5/5 core suites |
+| ASan/UBSan build and CTest | PASS; 6/6 suites |
 | Strict C99 host portability build | PASS |
 | Cortex-M0+ ARM GCC freestanding compile | PASS with `ISOTP_MAX_PAYLOAD=4095` |
 | Coverage | PASS; 67% total generic-library source coverage, with 88% `isotp.c`, 79% `uds.c`, and 87% `endpoint.c` in the current run |
 | clang-format | PASS |
 | clang-tidy | PASS |
 | cppcheck | PASS; standard informational too-many-configurations note only |
-| STM32F767 cross-build | PASS; 26,784 B Flash and 43,304 B RAM in the current run |
+| STM32F767 cross-build | PASS; 14,036 B Flash and 43,312 B RAM in the current run |
 | Classical CAN HIL runner | Dry-run only; 15 cases |
+| C092 FDCAN Classic HIL runner | Dry-run only; 15 cases |
 | CAN-FD HIL runner | Dry-run only; 18 cases |
 | Physical STM32C092/STM32F767 HIL | Not executed; hardware and analyzer unavailable |
 
@@ -238,7 +239,21 @@ The implementation satisfies the written Issue #7/#8 software requirements and t
 
 This report does not claim formal ISO 14229 certification, production security, bootloader safety, or complete physical interoperability.
 
-## 8. Follow-on issues #9–#12
+## 8. Issues #10 and #12 C092 follow-up
+
+The latest reporter feedback says that the `0xCC` padding is not visible and that ECUReset remains erroneous [6] [7]. The supplied STM32C092 project was audited before modification and is an older copied project rather than the current repository HEAD.
+Its application calls only `isotp_config_classic_can()` and never enables padding, so the generic library’s intentionally disabled default remains active. Its FDCAN transport copies the logical frame length into the HAL header and treats `HAL_FDCAN_AddMessageToTxFifoQ()` returning `HAL_OK` as completion. It uses `FDCAN_TX_FIFO_OPERATION` and stores TX events, but enables only the RX FIFO notification and provides no TX-completion callback. The copied project also lacks the current application-owned ECUReset execute callback.
+
+The repository changes correct the application boundaries rather than hard-coding target policy into the generic core. The F767 Classical CAN profile now explicitly calls `isotp_config_set_padding(..., true, 0xCC)`. A maintained C092 FDCAN adapter under `examples/stm32c092/` does the same for FDCAN in Classic CAN mode, preserves the logical payload length, stores a unique message marker in the TX Event FIFO, drains matching TX events, and exposes completion only after the matching event. The generic endpoint invokes the application reset executor only after that completion boundary. Optional lifecycle events report `REQUESTED`, `RESPONSE_READY`, `TX_SUBMITTED`, `TX_COMPLETE`, and `EXECUTED` without adding HAL dependencies.
+
+| Issue | Root cause classification | Software fix | Current evidence | Remaining acceptance item |
+|---|---|---|---|---|
+| #10 | Application/profile configuration gap in the copied C092 project; generic padding default is intentionally disabled. | Explicit C092/F767 Classical CAN profile padding with DLC 8 and `0xCC` serialization fill; logical ISO-TP length unchanged. | Host padding tests, profile source review, C092 HAL-backed adapter syntax check. | Physical C092 capture must prove SF, FF, FC, final CF, and unused bytes equal `0xCC`. |
+| #12 | STM32C092 FDCAN adapter boundary gap: FIFO acceptance was not physical completion, and no TX-event completion path was wired. Generic endpoint already defers reset correctly. | FDCAN TX Event FIFO completion adapter, application-owned reset executor, and optional ordered diagnostic events. | Host deferred-reset/event-order tests and C092 HAL-backed adapter syntax check. | Physical C092 trace must show `51 01` observed before MCU reset, with exactly-once reset execution. |
+
+No arbitrary delay is used. No FDCAN or CMSIS symbol was added to `library/`. The supplied project cannot be physically flashed or measured in this environment; Issues #10 and #12 therefore remain open for board-level review until the required C092 HIL evidence exists.
+
+## 9. Follow-on issues #9–#12
 
 The follow-on implementation preserves the existing layered architecture rather than creating a second transport or UDS stack.
 
@@ -258,3 +273,5 @@ The attached issue screenshots/documents were used only to confirm the requireme
 [3]: https://www.iso.org/standard/72439.html "ISO 14229-1:2020 metadata and scope"
 [4]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/blob/main/library/include/uds_iso_tp/uds.h "UDS public API"
 [5]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/blob/main/library/src/uds.c "UDS implementation"
+[6]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/issues/10 "Issue #10 — ISO-TP Classical CAN 0xCC padding"
+[7]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/issues/12 "Issue #12 — UDS ECUReset response ordering"

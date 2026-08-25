@@ -14,6 +14,19 @@
       "bitrate_switch": false,
       "max_data_length": 8
     },
+    "c092-fdcan-classic": {
+      "target": "STM32C092 FDCAN1",
+      "frame_format": "Classical CAN through FDCAN",
+      "request_can_id": "0x7E0",
+      "functional_request_can_id": "0x7DF",
+      "response_can_id": "0x7E8",
+      "nominal_bitrate_bps": null,
+      "data_bitrate_bps": null,
+      "bitrate_switch": false,
+      "max_data_length": 8,
+      "tx_mode": "FDCAN_TX_FIFO_OPERATION with stored TX events",
+      "tx_completion": "TX Event FIFO new-data callback"
+    },
     "can-fd": {
       "target": "Selected FDCAN-capable STM32",
       "frame_format": "CAN FD",
@@ -34,7 +47,8 @@
     "destructive_tests_enabled is false for initial bring-up"
   ],
   "cases": [
-    {"id": "TP-003-SF", "kind": "transport", "name": "single_frame_boundaries", "profiles": ["classic-can", "can-fd"], "destructive": false},
+    {"id": "TP-003-SF", "kind": "transport", "name": "single_frame_boundaries", "profiles": ["classic-can", "c092-fdcan-classic", "can-fd"], "destructive": false},
+    {"id": "TP-014-PADDING", "kind": "transport", "name": "c092_classic_padding_0xcc", "profiles": ["c092-fdcan-classic"], "destructive": false},
     {"id": "TP-004-MF", "kind": "transport", "name": "first_and_consecutive_frames", "profiles": ["classic-can", "can-fd"], "destructive": false},
     {"id": "TP-005-EXTFF", "kind": "transport", "name": "extended_first_frame_over_4095", "profiles": ["can-fd"], "destructive": false},
     {"id": "TP-006-CTS", "kind": "flow_control", "name": "clear_to_send", "profiles": ["classic-can", "can-fd"], "destructive": false},
@@ -51,7 +65,8 @@
     {"id": "UDS-013-NRC", "kind": "uds", "name": "negative_response_mapping", "profiles": ["classic-can", "can-fd"], "destructive": false},
     {"id": "UDS-009-34", "kind": "destructive", "name": "request_download", "profiles": ["classic-can", "can-fd"], "destructive": true},
     {"id": "UDS-010-36", "kind": "destructive", "name": "transfer_data", "profiles": ["classic-can", "can-fd"], "destructive": true},
-    {"id": "UDS-002-11", "kind": "destructive", "name": "ecu_reset", "profiles": ["classic-can", "can-fd"], "destructive": true}
+    {"id": "UDS-002-11", "kind": "destructive", "name": "ecu_reset", "profiles": ["classic-can", "can-fd"], "destructive": true},
+    {"id": "UDS-014-11-ORDER", "kind": "destructive", "name": "c092_ecu_reset_response_before_reset", "profiles": ["c092-fdcan-classic"], "destructive": true}
   ],
   "required_evidence": [
     "raw timestamped trace",
@@ -62,6 +77,8 @@
     "nominal and data timing configuration",
     "measured request-to-response latency",
     "measured inter-consecutive-frame spacing",
-    "per-case verdict and reviewer"
+    "per-case verdict and reviewer",
+    "for ECUReset: response-observed timestamp before reset-observed timestamp",
+    "for C092 padding: captured DLC and all unused bytes equal 0xCC"
   ]
 }

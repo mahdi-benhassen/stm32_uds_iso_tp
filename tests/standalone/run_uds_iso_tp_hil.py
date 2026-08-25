@@ -29,8 +29,8 @@ class Evidence:
     destructive: bool
 
 
-def inventory(can_fd: bool) -> list[Evidence]:
-    profile = "can-fd" if can_fd else "classic-can"
+def inventory(can_fd: bool, profile: str | None = None) -> list[Evidence]:
+    profile = profile or ("can-fd" if can_fd else "classic-can")
     dlc = 64 if can_fd else 8
     values = [
         ("tester_present", 2, "3E00", False),
@@ -143,6 +143,7 @@ def main() -> int:
     parser.add_argument("--bitrate", type=int, default=500000)
     parser.add_argument("--data-bitrate", type=int)
     parser.add_argument("--can-fd", action="store_true")
+    parser.add_argument("--profile", choices=("classic-can", "c092-fdcan-classic", "can-fd"))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-destructive", action="store_true")
     parser.add_argument("--board-profile", type=Path)
@@ -152,6 +153,10 @@ def main() -> int:
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
+    if args.profile == "can-fd" and (args.data_bitrate is None) and not args.dry_run:
+        args.can_fd = True
+    if args.profile and args.profile != "can-fd" and args.can_fd:
+        parser.error("a Classic CAN profile cannot be combined with --can-fd")
     if args.can_fd and (args.data_bitrate is None) and not args.dry_run:
         parser.error("live CAN-FD mode requires --data-bitrate")
     if args.allow_destructive and not args.dry_run:
@@ -161,14 +166,17 @@ def main() -> int:
     if args.trace and not args.trace.is_file():
         parser.error("--trace must point to an existing file")
     metadata = provenance(args.board_profile, args.analyzer, args.trace)
-    results = inventory(args.can_fd)
+    selected_profile = args.profile or ("can-fd" if args.can_fd else "classic-can")
+    if selected_profile == "can-fd":
+        args.can_fd = True
+    results = inventory(args.can_fd, selected_profile)
     if args.dry_run:
         for result in results:
             result.verdict = "DRY_RUN"
     else:
         run_live(results, args.interface, args.bitrate, args.data_bitrate, args.allow_destructive)
     write_reports(results, metadata, args.json, args.csv, args.report)
-    print(json.dumps({"profile": "can-fd" if args.can_fd else "classic-can", "cases": len(results),
+    print(json.dumps({"profile": selected_profile, "cases": len(results),
                       "verdicts": sorted({result.verdict for result in results})}, indent=2))
     return 0
 

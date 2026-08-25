@@ -11,6 +11,8 @@ typedef struct {
     unsigned int failures_remaining;
     uint8_t response_size;
     unsigned int reset_calls;
+    UdsResetEvent reset_events[8];
+    size_t reset_event_count;
 } Sink;
 
 static bool send_frame(void *context, const IsoTpCanFrame *frame) {
@@ -68,6 +70,12 @@ static void ecu_reset_execute(void *context, uint8_t subfunction) {
 static bool tx_complete_deferred(void *context) {
     (void)context;
     return false;
+}
+
+static void reset_event(void *context, UdsResetEvent event) {
+    Sink *sink = (Sink *)context;
+    assert(sink->reset_event_count < (sizeof(sink->reset_events) / sizeof(sink->reset_events[0])));
+    sink->reset_events[sink->reset_event_count++] = event;
 }
 
 static IsoTpCanFrame flow_control(bool can_fd, uint8_t status) {
@@ -158,7 +166,9 @@ static void test_deferred_reset_and_full_duplex(void) {
         .send_frame = send_frame,
         .tx_complete = tx_complete_deferred,
         .clock_ms = clock_ms,
+        .reset_event = reset_event,
         .context = &reset_sink,
+        .reset_event_context = &reset_sink,
         .isotp_config = transport,
         .request_id = 0x7E0U,
         .response_id = 0x7E8U,
@@ -173,13 +183,22 @@ static void test_deferred_reset_and_full_duplex(void) {
     reset_request.data[1] = 0x11U;
     reset_request.data[2] = 0x01U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 0U) == ISOTP_TX_FRAME_READY);
+    assert(reset_sink.reset_event_count == 2U &&
+           reset_sink.reset_events[0] == UDS_RESET_EVENT_REQUESTED &&
+           reset_sink.reset_events[1] == UDS_RESET_EVENT_RESPONSE_READY);
     assert(uds_isotp_endpoint_process(&reset_endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    assert(reset_sink.reset_event_count == 3U &&
+           reset_sink.reset_events[2] == UDS_RESET_EVENT_TX_SUBMITTED);
     assert(reset_sink.count == 1U && reset_sink.frames[0].data[0] == 0x02U &&
            reset_sink.frames[0].data[1] == 0x51U && reset_sink.reset_calls == 0U);
     assert(uds_server_reset_pending(&reset_endpoint.uds));
     uds_isotp_endpoint_tx_complete(&reset_endpoint);
-    assert(reset_sink.reset_calls == 1U);
+    assert(reset_sink.reset_calls == 1U && reset_sink.reset_event_count == 5U &&
+           reset_sink.reset_events[3] == UDS_RESET_EVENT_TX_COMPLETE &&
+           reset_sink.reset_events[4] == UDS_RESET_EVENT_EXECUTED);
     assert(!uds_server_reset_pending(&reset_endpoint.uds));
+    uds_isotp_endpoint_tx_complete(&reset_endpoint);
+    assert(reset_sink.reset_calls == 1U && reset_sink.reset_event_count == 5U);
 
     reset_request.data[2] = 0x02U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 1U) == ISOTP_TX_FRAME_READY);
@@ -192,7 +211,10 @@ static void test_deferred_reset_and_full_duplex(void) {
     reset_request.data[1] = 0x11U;
     reset_request.data[2] = 0x81U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 2U) == ISOTP_COMPLETE);
-    assert(!reset_endpoint.tx_pending && reset_sink.reset_calls == 2U);
+    assert(!reset_endpoint.tx_pending && reset_sink.reset_calls == 2U &&
+           reset_sink.reset_event_count == 7U &&
+           reset_sink.reset_events[5] == UDS_RESET_EVENT_REQUESTED &&
+           reset_sink.reset_events[6] == UDS_RESET_EVENT_EXECUTED);
 
     Sink duplex_sink = {0};
     duplex_sink.response_size = 16U;

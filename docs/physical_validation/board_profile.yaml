@@ -22,6 +22,28 @@ classical_can_target:
   power_and_ground: "TBD"
   peer_interface: "TBD independent CAN tester or analyzer"
 
+c092_fdcan_classic_target:
+  status: "requires-selected-board"
+  mcu: "STM32C092"
+  board: "TBD exact board and revision"
+  peripheral: "FDCAN1 in Classic CAN mode"
+  transceiver: "TBD part and operating mode"
+  can_pins:
+    rx: "TBD generated CubeMX pin"
+    tx: "TBD generated CubeMX pin"
+  nominal_bitrate_bps: null
+  data_bitrate_bps: null
+  bitrate_switch: false
+  request_can_id: "0x7E0"
+  functional_request_can_id: "0x7DF"
+  response_can_id: "0x7E8"
+  addressing: "11-bit normal addressing"
+  termination_ohms: "TBD; verify two 120-ohm end terminations"
+  message_ram_configuration: "TBD generated HAL FDCAN configuration"
+  tx_mode: "FDCAN_TX_FIFO_OPERATION with stored TX events"
+  tx_completion: "FDCAN TX Event FIFO new-data callback; no queue-acceptance shortcut"
+  peer_interface: "TBD independent CAN tester or analyzer"
+
 can_fd_target:
   status: "requires-selected-board"
   mcu: "TBD FDCAN-capable STM32"

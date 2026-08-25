@@ -1,6 +1,7 @@
 #include "uds_app.h"
 
 #include "uds_platform.h"
+#include "uds_app_config.h"
 #include "uds_iso_tp/endpoint.h"
 #include "uds_iso_tp/uds.h"
 
@@ -44,6 +45,9 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
 
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);
+#if UDS_APP_CLASSIC_PADDING_ENABLED
+    isotp_config_set_padding(&config.isotp_config, true, UDS_APP_CLASSIC_PADDING_VALUE);
+#endif
     config.send_frame = uds_can_transport_send;
     config.tx_complete = uds_can_transport_tx_complete;
     config.clock_ms = uds_can_transport_clock;

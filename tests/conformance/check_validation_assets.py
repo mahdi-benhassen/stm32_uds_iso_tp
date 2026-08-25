@@ -11,6 +11,7 @@ MATRIX = ROOT / "docs/conformance/iso15765_iso14229_matrix.md"
 PROFILE = ROOT / "docs/physical_validation/board_profile.yaml"
 PLAN = ROOT / "tests/physical/hil_test_plan.json"
 VECTORS = ROOT / "tests/conformance/conformance_vectors.json"
+C092_DIR = ROOT / "examples/stm32c092"
 
 
 def main() -> int:
@@ -45,6 +46,42 @@ def main() -> int:
     if missing:
         raise SystemExit(f"board profile missing required content: {missing}")
 
+    c092_files = {
+        "can_transport_fdcan.c",
+        "can_transport_fdcan.h",
+        "uds_app_config.h",
+        "uds_app_fdcan.c",
+        "uds_app_fdcan.h",
+        "uds_platform_fdcan.c",
+        "uds_platform_fdcan.h",
+        "README.md",
+    }
+    missing_files = sorted(name for name in c092_files if not (C092_DIR / name).is_file())
+    if missing_files:
+        raise SystemExit(f"C092 adapter missing required files: {missing_files}")
+    c092_transport = (C092_DIR / "can_transport_fdcan.c").read_text(encoding="utf-8")
+    c092_profile = (C092_DIR / "uds_app_config.h").read_text(encoding="utf-8")
+    c092_guide = (C092_DIR / "README.md").read_text(encoding="utf-8")
+    c092_required_tokens = (
+        "FDCAN_TX_FIFO_OPERATION",
+        "FDCAN_STORE_TX_EVENTS",
+        "FDCAN_TX_EVENT",
+        "HAL_FDCAN_GetTxEvent",
+        "isotp_config_set_padding",
+        "0xCCU",
+    )
+    missing = [
+        token
+        for token in c092_required_tokens
+        if token not in c092_transport + c092_profile + c092_guide
+    ]
+    if missing:
+        raise SystemExit(f"C092 adapter/profile missing required content: {missing}")
+
+    f767_profile = (ROOT / "App/Inc/uds_app_config.h").read_text(encoding="utf-8")
+    if "UDS_APP_CLASSIC_PADDING_ENABLED 1U" not in f767_profile or "0xCCU" not in f767_profile:
+        raise SystemExit("F767 application profile must explicitly enable 0xCC padding")
+
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):
         raise SystemExit("conformance vector file is empty or has an unsupported schema")
@@ -67,7 +104,7 @@ def main() -> int:
     if plan.get("schema_version") != 1:
         raise SystemExit("unsupported HIL plan schema")
     profiles = plan.get("profiles", {})
-    for name in ("classic-can", "can-fd"):
+    for name in ("classic-can", "c092-fdcan-classic", "can-fd"):
         if name not in profiles:
             raise SystemExit(f"HIL plan missing profile: {name}")
     cases = plan.get("cases", [])

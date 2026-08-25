@@ -10,12 +10,22 @@
 typedef bool (*UdsIsoTpSendFrameFn)(void *context, const IsoTpCanFrame *frame);
 typedef bool (*UdsIsoTpTxCompleteFn)(void *context);
 typedef uint32_t (*UdsIsoTpClockFn)(void *context);
+typedef enum {
+    UDS_RESET_EVENT_REQUESTED = 0,
+    UDS_RESET_EVENT_RESPONSE_READY,
+    UDS_RESET_EVENT_TX_SUBMITTED,
+    UDS_RESET_EVENT_TX_COMPLETE,
+    UDS_RESET_EVENT_EXECUTED
+} UdsResetEvent;
+typedef void (*UdsIsoTpResetEventFn)(void *context, UdsResetEvent event);
 
 typedef struct {
     UdsIsoTpSendFrameFn send_frame;
     UdsIsoTpTxCompleteFn tx_complete;
     UdsIsoTpClockFn clock_ms;
+    UdsIsoTpResetEventFn reset_event;
     void *context;
+    void *reset_event_context;
     IsoTpConfig isotp_config;
     uint32_t request_id;
     uint32_t response_id;
