@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #include "uds_did.h"
 
@@ -54,7 +54,7 @@ void uds_did_registry_init(UdsDidRegistry *registry, const UdsProjectDidSource *
               UDS_DID_SESSION_ALL_MASK, 1U);
     set_entry(&registry->entries[4], UDS_DID_DEVICE_IDENTITY, &source->device_identity, 64U,
               UDS_DID_SESSION_ALL_MASK, 0U);
-    set_entry(&registry->entries[5], UDS_DID_CANOPEN_NODE_ID, &source->canopen_node_id, 1U,
+    set_entry(&registry->entries[5], UDS_DID_CONTROLLER_ID, &source->controller_id, 1U,
               UDS_DID_SESSION_ALL_MASK, 0U);
     set_entry(&registry->entries[6], UDS_DID_CAN_BITRATE, &source->can_bitrate, 4U,
               UDS_DID_SESSION_ALL_MASK, 0U);
@@ -68,7 +68,7 @@ void uds_did_registry_init(UdsDidRegistry *registry, const UdsProjectDidSource *
               UDS_DID_SESSION_ALL_MASK, 1U);
     set_entry(&registry->entries[11], UDS_DID_CAN_ERROR_COUNTERS, &source->can_error_counters, 32U,
               UDS_DID_SESSION_ALL_MASK, 0U);
-    set_entry(&registry->entries[12], UDS_DID_CANOPEN_ERROR_STATE, &source->canopen_error_state, 4U,
+    set_entry(&registry->entries[12], UDS_DID_NETWORK_ERROR_STATE, &source->network_error_state, 4U,
               UDS_DID_SESSION_ALL_MASK, 0U);
 }
 

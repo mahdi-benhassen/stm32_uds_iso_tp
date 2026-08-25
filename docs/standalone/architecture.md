@@ -1,6 +1,6 @@
 # Standalone Architecture
 
-The standalone library is independent of CANopenNode. It is a protocol component that accepts and emits abstract CAN frames through callbacks; it does not own a CAN peripheral, scheduler, GPIO, clock tree, interrupt vector, Flash controller, or bootloader.
+The standalone library implements ISO 15765-2 ISO-TP and ISO 14229 UDS independently of CANopen. CANopen is neither required nor included. It accepts and emits abstract CAN frames through callbacks; it does not own a CAN peripheral, scheduler, GPIO, clock tree, interrupt vector, Flash controller, or bootloader.
 
 | Layer | Path | Responsibility |
 |---|---|---|
@@ -11,11 +11,11 @@ The standalone library is independent of CANopenNode. It is a protocol component
 | Endpoint | `library/src/endpoint.c` | Mainline composition of ISO-TP and UDS using an injected send function and clock. |
 | Hardware binding | `examples/` | Thin STM32 bxCAN or FDCAN callback contracts. |
 
-> A transport library can be reused by CANopen, a bootloader, a test fixture, or another application without making any of those systems a dependency.
+> A transport library can be reused by a bootloader, a test fixture, or another application without making any of those systems a dependency.
 
 The implementation uses static arrays sized by `ISOTP_MAX_PAYLOAD` and `UDS_MAX_*` configuration macros. A caller must run `uds_isotp_endpoint_receive()` from its received-frame handoff and call `uds_isotp_endpoint_process()` from a bounded mainline or task context. The frame-send callback must be non-blocking; a false return leaves the pending frame for a later call.
 
-No UDS dispatch, Flash erase/program operation, reset operation, logging, or heap allocation belongs in an interrupt callback. The STM32F767 example keeps CANopenNode in the original snapshot and does not reuse it from the standalone library.
+No UDS dispatch, Flash erase/program operation, reset operation, logging, or heap allocation belongs in an interrupt callback. The STM32F767 example is now a minimal UDS-only application and does not initialize or link another protocol stack.
 
 ## References
 

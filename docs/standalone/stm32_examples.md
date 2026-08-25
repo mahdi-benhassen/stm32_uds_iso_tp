@@ -14,5 +14,5 @@ The example is compile-checked as a HAL-independent adapter contract. It is not 
 
 | Example | Native hardware claim | Required HIL evidence |
 |---|---|---|
-| STM32F767 bxCAN | Classical CAN only | CAN transceiver, filters, timing, bus load, error recovery, and UDS/CANopen coexistence. |
+| STM32F767 bxCAN | Classical CAN only | CAN transceiver, filters, timing, bus load, error recovery, ISO-TP timing, and UDS request/response traces. |
 | FDCAN-capable STM32 | CAN-FD possible with selected generated project | Nominal/data bit rates, BRS, DLC 64, extended FF, interoperability, errors, and power/reset recovery. |

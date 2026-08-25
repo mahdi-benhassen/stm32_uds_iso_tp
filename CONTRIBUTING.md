@@ -1,61 +1,46 @@
 # Contributing
 
-Thank you for improving the STM32F767 CANopen reference. Contributions should preserve deterministic timing, explicit ownership boundaries, safe default behavior, and reproducible builds.
+Thank you for improving the independent STM32 UDS/ISO-TP stack. Contributions should preserve bounded execution, explicit ownership boundaries, safe defaults, and reproducible host and target builds.
 
 ## Before making a change
 
-Read the [README](README.md), [BUILD.md](BUILD.md), [third-party inventory](THIRD_PARTY.md), the [documentation map](docs/README.md), and the relevant hardware procedure. For third-party Object Dictionary requests, follow [Handling third-party OD requests](docs/handling_third_party_od_requests.md). Confirm whether the change affects the Object Dictionary, CAN wire format, generated code, safety defaults, or a device-profile contract.
+Read the [README](README.md), [BUILD.md](BUILD.md), [PRODUCT_SCOPE.md](PRODUCT_SCOPE.md), [THIRD_PARTY.md](THIRD_PARTY.md), and the relevant standalone documentation. Confirm whether the change affects the ISO-TP wire format, UDS service behavior, configured payload bounds, generated target code, adapter metadata, safety defaults, or a hardware evidence requirement.
 
-Do not commit secrets, private keys, vendor credentials, proprietary board files, generated build output, or a local STM32CubeF7 checkout. Keep application changes in `App/` or project-owned middleware and do not modify the pinned third-party stack unless the change is explicitly justified.
+Do not commit secrets, private keys, vendor credentials, proprietary board files, generated build output, or an unmanaged vendor SDK. Keep protocol behavior in `library/`, target bindings in `examples/` or the application adapter, and platform-specific policy in application-owned files.
 
 ## Development workflow
 
-1. Create a topic branch from `main`.
-2. Make one logically complete change at a time.
-3. Add or update deterministic tests for pure logic and source contracts.
-4. Run the host validation and the relevant ARM personality build.
-5. Update the documentation, Object Dictionary, release notes, and hardware procedure when the public behavior changes.
-6. Open a pull request using the repository template.
-
-Generated Object Dictionary files must be reviewed together with their source EDS/XDD. A changed CAN-ID, PDO map, SDO access rule, identity value, timing value, or profile index is an interface change and requires explicit review.
+Create a topic branch from `main`, make one logically complete change at a time, add deterministic tests for pure logic and source contracts, run the host and relevant target validation, and update documentation when public behavior changes. A change must not introduce a hidden protocol dependency or a new blocking path in an interrupt handler.
 
 ## Coding conventions
 
-Use C11-compatible code for project-owned C. Prefer fixed-width integer types, explicit bounds, checked return values, and static storage where practical. Keep CAN and timer interrupt work bounded and non-blocking. Do not allocate memory, write NVM, format strings, or perform blocking I/O from an ISR.
+Use C11-compatible code for project-owned C. Prefer fixed-width integer types, explicit bounds, checked return values, and static storage where practical. Keep CAN and timer interrupt work bounded and non-blocking. Do not allocate memory, write Flash, format strings, or perform blocking I/O from an ISR.
 
-Use the repository `.clang-format` configuration for C formatting. Public interfaces should have concise Doxygen-style comments that state ownership, timing context, valid ranges, and failure behavior. Python code should use the standard library where possible, explicit argument validation, and deterministic output suitable for CI.
+Use the repository `.clang-format` configuration for C formatting. Public interfaces should state ownership, timing context, valid ranges, and failure behavior. Python code should use the standard library where possible, explicit argument validation, and deterministic output suitable for CI.
 
 ## Validation commands
 
 Run these checks from the repository root:
 
 ```sh
-python3 scripts/validate_od.py
-python3 scripts/validate_cia418.py
-python3 scripts/validate_inventus_battery.py
-python3 scripts/mock_canopen_runner.py
-python3 tests/test_firmware_configuration.py
-python3 tests/test_canopen_wire_contract.py
-python3 tests/run_uds_isotp_contract.py
-python3 tests/run_nmea2000_gateway_contract.py
-make -C tests/host all test-stm32-facade test-gateway-default-deny test-inventus-battery test-mock-canopen
+python3 tests/architecture/check_standalone_architecture.py
+cmake -S library -B build/standalone -G Ninja \
+  -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON
+cmake --build build/standalone --parallel
+ctest --test-dir build/standalone --output-on-failure
+cmake -S . -B build/stm32f767 -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake
+cmake --build build/stm32f767 --parallel
+python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run
+python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --can-fd
 ```
 
-For a target build, follow [BUILD.md](BUILD.md). For the complete local sequence, run `bash scripts/validate_reference.sh`; it includes the Inventus validator, mock protocol runner, host targets, contract checks, and ARM personality builds. The mock runner’s scope and limitations are documented in [In-process CANopen protocol smoke testing](docs/mock_canopen_protocol_smoke_testing.md). For physical CAN testing, use the procedure in `docs/hardware/uds_cia302_test_procedure.md` and attach the JSON result and trace evidence to the pull request or release record.
+The hosted workflow additionally runs coverage instrumentation, AddressSanitizer, UndefinedBehaviorSanitizer, clang-format, clang-tidy, cppcheck, and the STM32F767 cross-build. Physical HIL must identify the exact board, transceiver, timing, wiring, peer equipment, and captured evidence.
 
 ## Commit and pull-request format
 
-Use imperative, scoped commit subjects such as:
-
-```text
-feat(cia402): add bounded homing-state adapter
-fix(can): reject invalid receive DLC
-ci: build the opt-in CiA 302 personality
-docs: clarify CubeMX ownership boundaries
-```
-
-A pull request should explain the behavior change, list affected profiles or Object Dictionary objects, identify the validation performed, and state any hardware tests that could not be run. Separate unrelated refactors from functional changes.
+Use imperative scoped subjects such as `fix(isotp): reject reserved STmin`, `test(uds): cover response bounds`, `ci: run architecture check`, or `docs: clarify FDCAN adapter limits`. A pull request should explain the behavior change, list affected profiles and configuration values, identify validation performed, and state hardware tests that could not be run.
 
 ## Review and merge requirements
 
-A change is ready for merge when the relevant deterministic tests pass, the affected firmware personality builds, `git diff --check` is clean, documentation is updated, and reviewers understand any hardware or conformance limitations. Changes involving safety outputs, gateway authorization, persistent storage, or production identity require explicit product-owner review before release use.
+A change is ready for merge when deterministic tests pass, the affected target build succeeds, `git diff --check` is clean, documentation is updated, and reviewers understand any hardware or conformance limitations. Changes involving Flash, reset, security, or board safety require explicit product-owner review before release use.

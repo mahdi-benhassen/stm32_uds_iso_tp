@@ -1,8 +1,8 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
-#ifndef STM32_CANOPEN_UDS_DOWNLOAD_H
-#define STM32_CANOPEN_UDS_DOWNLOAD_H
+#ifndef STM32_UDS_ISO_TP_DOWNLOAD_H
+#define STM32_UDS_ISO_TP_DOWNLOAD_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -55,7 +55,7 @@ typedef struct {
     UdsDownloadRegion staging_image;
     UdsDownloadRegion bootloader;
     UdsDownloadRegion active_application;
-    UdsDownloadRegion canopen_nvm;
+    UdsDownloadRegion persistent_storage;
     UdsDownloadRegion diagnostic_storage;
     uint32_t erase_alignment;
     uint32_t program_alignment;

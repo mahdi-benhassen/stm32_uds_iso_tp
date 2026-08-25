@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #include "uds_download.h"
 
@@ -63,7 +63,7 @@ UdsDownloadResult uds_download_begin(UdsDownload *download, uint32_t address, ui
         !range_inside(download->memory.staging_image, address, length) ||
         overlaps(image, download->memory.bootloader) ||
         overlaps(image, download->memory.active_application) ||
-        overlaps(image, download->memory.canopen_nvm) ||
+        overlaps(image, download->memory.persistent_storage) ||
         overlaps(image, download->memory.diagnostic_storage)) {
         return UDS_DOWNLOAD_OUT_OF_RANGE;
     }

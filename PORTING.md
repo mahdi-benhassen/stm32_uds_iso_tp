@@ -1,41 +1,30 @@
-# CubeMX branch — CANopen integration notes
+# Porting the standalone UDS / ISO-TP stack
 
-This branch carries the STM32CubeMX-generated project for the STM32F767
-(`stm32f767_canopen.ioc`). The CANopen stack and application layers from the
-`main` branch are ported here **without modifying any generated function**:
-all firmware integration lives in `USER CODE` sections, in new project-owned
-files, and in the designated user areas of `CMakeLists.txt`.
+The repository separates protocol code from the target platform. The authoritative implementation in `library/` depends only on fixed-width types, configured storage, an injected clock, and injected CAN/CAN-FD frame callbacks. A target application supplies the hardware binding and application callbacks.
 
-## Added layers
+## Layer boundaries
 
-| Layer | Location | Origin |
+| Layer | Location | Responsibility |
 |---|---|---|
-| CANopenNode + STM32 binding | `third_party/CanOpenSTM32` (submodule, pinned `b313b2b`) | upstream |
-| Runtime wrapper, profiles, storage, watchdog, recovery, diagnostics, LSS policy, gateway seam, timing | `App/Src`, `App/Inc` | ported from `main` |
-| CiA 302 NMT-master helper, acceptance-filter policy | `middleware/canopen/core` | ported from `main` |
-| Generated Object Dictionary (CiA 401 default personality) | `Generated/OD.c/.h` | ported from `main` |
+| UDS and ISO-TP | `library/include/uds_iso_tp`, `library/src` | Protocol state machines, bounded buffers, service dispatch, and transport framing |
+| Target bindings | `examples/stm32f767_bxcan`, `examples/stm32_fdcan` | Frame metadata conversion between the generic API and vendor HAL types |
+| STM32F767 application | `App/Inc`, `App/Src`, `Core/` | HAL initialization, deferred RX handoff, main-loop scheduling, and application-owned UDS callbacks |
+| Host validation | `library/tests`, `tests/architecture`, `tests/standalone` | Deterministic protocol contracts, architecture checks, and safety-gated HIL inventory |
 
-## Generated-code interaction rules
+## CubeMX integration rules
 
-- `Core/**`, `Drivers/**`, startup, linker script: untouched.
-- `Core/Src/main.c`: only `USER CODE` sections filled (includes, PV, PD,
-  callback in section 0, board/timing/watchdog init in `Init`, app start in
-  section 2, mainline loop in `WHILE`, fault recording inside
-  `Error_Handler_Debug`).
-- Root `CMakeLists.txt`: extended only in the marked user areas; HAL/CMSIS
-  remain inside the generated `STM32_Drivers` library.
+Keep generated clock, GPIO, CAN, NVIC, startup, and linker files under the generated project areas. Add target-specific logic through application-owned source files and explicit callback boundaries. The RX interrupt must only copy or enqueue a frame; UDS and ISO-TP dispatch belongs in the mainline or another non-interrupt execution context.
 
-## Deliberate peripheral fix-ups (`canopen_reference_port_fixup.c`)
+For bxCAN, configure the generic frame as Classical CAN with an actual data length of at most eight bytes. For FDCAN, propagate the actual valid CAN-FD data length and bit-rate-switch flag; do not encode CAN-FD behavior through a Classical CAN DLC value. The FDCAN example is intentionally a binding contract and must be completed with a concrete CubeMX-generated board project before physical HIL.
 
-The generated `MX_CAN1_Init` cannot express two protocol requirements, so an
-application-layer fix-up re-initializes CAN1 through HAL before the runtime
-starts:
+## Addressing
 
-| Item | Generated value | Applied value | Why |
-|---|---|---|---|
-| Auto retransmission | DISABLE | ENABLE | CiA 301 mandates frame retransmission on error; disabled bxCAN silently drops frames |
-| Sample point @500 kbit/s | 12/18 tq = 66.7 % | 15/18 tq = 83.3 % | matches reference timing table and typical CiA network expectations |
-| Auto bus-off | DISABLE | kept DISABLE | bus-off recovery is owned by the bounded software recovery state machine |
-| TIM7 NVIC priority | (0,0) — equal to CAN RX | demoted to (1,0) | 1 ms dispatch must not preempt CAN reception |
+Configure request and response CAN identifiers explicitly in the application or endpoint configuration. The reference F767 application uses request `0x7E0` and response `0x7E8`. These are diagnostic identifiers, not network-management or object-dictionary identifiers. Extended and functional addressing require a separate API design and test matrix before use.
 
-TIM7 keeps the generated 1 ms cadence (108 MHz / 108 / 1000).
+## Application callbacks
+
+UDS service callbacks own application policy. A product must provide its own DID values, SecurityAccess provider, reset policy, download memory map, erase/program callbacks, and any physical safety interlocks. The deterministic security provider in the repository is test-only. Keep all Flash, bootloader, reset, and authentication decisions outside the transport ISR.
+
+## Verification
+
+Run the host CTest suite, architecture check, sanitizer build, formatting, clang-tidy, cppcheck, and both HIL dry-run profiles before flashing. Record the exact MCU, HAL revision, compiler, transceiver, nominal/data bit rates, message-RAM configuration, CAN IDs, wiring, peer equipment, and captured traces for a physical campaign.

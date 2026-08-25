@@ -9,7 +9,7 @@ HIL must use an independent CAN interface connected to the selected target board
 | Multi-frame | 4,095-byte FF boundary | 4,095-byte and >4,095-byte extended FF |
 | Flow control | CTS, WAIT limit, OVERFLOW, BS, STmin | Same plus DLC 64 and BRS |
 | Malformed traffic | Sequence, timeout, invalid PCI, invalid DLC | Same plus invalid CAN-FD DLC and format mismatch |
-| Coexistence | NMT, heartbeat, SDO, PDO, EMCY | CANopen traffic only where the selected FDCAN system supports it |
+| Interoperability | Independent diagnostic tester, ISO-TP timing, UDS positive/negative responses | Independent CAN-FD analyzer/tester, BRS, DLC, and extended-length interoperability |
 | Recovery | CAN error, bus-off, reset, watchdog | CAN-FD error states, bus-off, reset, watchdog |
 
 Reset, download, Flash erase/program, and activation tests are disabled by default. They require explicit operator flags, a sacrificial image, power-control capability, recovery access, and a signed test plan. A production update campaign additionally requires a bootloader, authenticated image verification, rollback behavior, and power-loss testing.

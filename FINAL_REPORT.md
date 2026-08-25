@@ -1,50 +1,50 @@
-# STM32 UDS / ISO-TP Standalone Repository — Completion Report
+# Standalone UDS / ISO-TP completion report
 
 ## Outcome
 
-The standalone repository is now published at [`mahdi-benhassen/stm32_uds_iso_tp`][1]. Its first commit, `01a7bd6`, is the exact snapshot of the `stm32f767_canopen_cubemx` baseline requested by the project owner. The independent implementation was then layered on top in commit `57480be`. The final remote `main` tip is `873b3ab`, which adds the release report and ensures documentation-only changes are covered by the same workflow.
+The repository is now structured as an independent ISO 15765-2 ISO-TP and ISO 14229 UDS project. The first historical commit remains the exact requested CubeMX snapshot, while the current tree removes the unrelated protocol stack, application layer, object-dictionary artifacts, submodule, and build/test dependencies. The complete pre-removal inventory is recorded in [`docs/architecture/canopen_removal_audit.md`](docs/architecture/canopen_removal_audit.md).
 
-The original `stm32_canopen_reference` implementation was not reverted or deleted. Its Issue #16 work remains frozen and tagged in the original repository, and Issue #16 remains open because physical production evidence is incomplete.
+> This repository implements ISO 15765-2 ISO-TP and ISO 14229 UDS independently of CANopen. CANopen is neither required nor included.
 
-## Published contents
+## Final architecture
 
-| Area | Delivered scope | Evidence |
-|---|---|---|
-| Independent transport | Protocol-neutral C11 ISO-TP core with fixed buffers, injected frame callbacks, Classical CAN and CAN-FD profiles | `library/include/uds_iso_tp/isotp.h`, `library/src/isotp.c` |
-| CAN-FD behavior | Valid 8/12/16/20/24/32/48/64-byte lengths, 64-byte Single-Frame support, SF escape format, BRS metadata, and extended First-Frame lengths above 4,095 bytes | 5,000-byte extended-FF host test and CAN-FD endpoint test |
-| UDS composition | Callback-based UDS server and ISO-TP endpoint without a CANopenNode dependency or heap allocation | `library/src/endpoint.c`, `library/src/uds.c` |
-| STM32F767 | bxCAN adapter contract that is explicitly Classical CAN only | `examples/stm32f767_bxcan/` |
-| FDCAN-capable STM32 | FDCAN adapter contract forwarding actual data length and BRS metadata | `examples/stm32_fdcan/` |
-| Testing | Four host CTest contracts, including both adapter contracts, plus AddressSanitizer and UndefinedBehaviorSanitizer builds | `library/tests/` |
-| Automation | GitHub Actions workflow for build, tests, sanitizers, formatting, clang-tidy, cppcheck, and HIL dry-run reports | `.github/workflows/standalone-uds.yml` |
-| HIL readiness | Non-destructive Classical CAN and CAN-FD inventory runner producing JSON, CSV, and Markdown reports | `tests/standalone/run_uds_iso_tp_hil.py` |
-| Documentation | Architecture, ISO-TP profile, STM32 examples, HIL checklist, validation gates, and release audit | `docs/standalone/` |
+```text
+UDS ISO 14229
+      |
+      v
+ISO-TP ISO 15765-2
+      |
+      v
+CAN/CAN-FD callback abstraction
+      |
+      +-- STM32F767 bxCAN / Classical CAN
+      +-- FDCAN-capable STM32 / CAN FD
+```
 
-## Validation result
+The authoritative implementation is limited to `library/include/uds_iso_tp/` and `library/src/`. The root STM32F767 application is a minimal UDS-only target using explicit diagnostic identifiers `0x7E0` and `0x7E8`. No CANopen submodule, protocol source, object dictionary, profile artifact, or optional protocol switch remains in the build graph.
 
-The local strict build completed successfully with all **four of four CTest contracts passing**. The sanitizer build also completed with all four tests passing. clang-format, clang-tidy, cppcheck, Python bytecode compilation, and both Classical CAN and CAN-FD HIL dry-run profiles completed successfully.
+## Removed and migrated material
 
-The hosted workflow [`Standalone UDS ISO-TP validation`][2] for the final commit `873b3ab` completed successfully. This proves reproducible host-side and adapter-contract validation in GitHub Actions; it does not prove electrical signaling, vendor HAL configuration, target interrupt latency, or physical interoperability.
+| Category | Action |
+|---|---|
+| Submodule metadata and gitlink | Removed `.gitmodules` and `third_party/CanOpenSTM32`. |
+| Protocol middleware | Removed the inherited CANopen core, ports, examples, gateway, and legacy diagnostic implementation. |
+| Application layer | Removed CANopen lifecycle, profile, object-dictionary, storage, gateway, LSS, watchdog, and recovery files; added `App/Src/uds_app.c`, `can_transport.c`, and `uds_platform.c`. |
+| Generated protocol artifacts | Removed object-dictionary sources, EDS files, profile data, and protocol-specific linker reservation. |
+| Tests and tooling | Removed protocol-specific host, fuzz, gateway, profile, and acceptance suites; retained standalone CTest, architecture, adapter, and HIL tests. |
+| Documentation and CI | Rewrote build, scope, porting, contributor, changelog, third-party, README, and pull-request guidance; removed the old protocol workflow and expanded standalone CI. |
+| Generic functionality | Retained generated STM32 HAL/CMSIS target infrastructure and expressed CAN transport and timing through neutral application-owned callbacks. |
 
-## Deliberate boundaries
+## Validation evidence
 
-The F767 example remains Classical CAN because the target project uses bxCAN. Native CAN-FD requires a distinct FDCAN-capable STM32 target or an external CAN-FD controller. The FDCAN directory is therefore an honest adapter contract rather than a fabricated vendor-generated board project. A physical CAN-FD campaign still needs a selected board, transceiver, nominal/data bit rates, message-RAM configuration, filters, wiring, peer ECU or analyzer, and captured evidence.
+The standalone host build passes all four CTest contracts. The sanitizer build passes the same contracts. The ISO-TP matrix covers Classical CAN and CAN FD, explicit TX states, CTS, bounded WAIT, immediate OVERFLOW, BS and STmin validation, reserved STmin rejection, wrong CAN ID, invalid DLC/PCI, timeout, and sequence errors. The architecture check passes for all tracked project paths, and the HIL runner’s Classical CAN and CAN-FD dry-run reports complete successfully.
 
-The transport supports payloads above 4,095 bytes, including the tested 5,000-byte extended First-Frame case. The UDS dispatcher is intentionally bounded separately: its callback API uses `uint16_t` lengths, its default request and response limits are 4,095 bytes, and compile-time assertions reject configurations above `UINT16_MAX`. The repository does not claim an unbounded end-to-end UDS payload path.
+The cleaned STM32F767 root target was cross-built successfully with `arm-none-eabi-gcc`. The resulting Debug image used approximately 22.7 KiB of Flash and 38.2 KiB of RAM in the local generated target build. The hosted workflow must repeat this cross-build, architecture check, coverage instrumentation, sanitizer, static-analysis, and HIL dry-run sequence before the cleanup is considered published.
 
-The repository is an engineering baseline, not a completed production bootloader or a full ISO 15765-2 / ISO 14229 conformance certification. SecurityAccess is policy-injected; the deterministic provider is test-only. Flash activation, authenticated image validation, rollback, anti-rollback, reset handoff, production key management, EMC qualification, and board-specific HIL remain product-owned work.
+## Remaining limitations
 
-## Optional integration path
+A host or cross-build does not prove electrical signaling, transceiver behavior, target interrupt latency, message-RAM configuration, bus-off recovery, EMC performance, production cryptography, authenticated firmware activation, Flash power-loss behavior, or formal ISO conformance. The FDCAN example remains an adapter contract and requires a concrete FDCAN-capable STM32 board project for physical CAN-FD HIL.
 
-The recommended next step is to integrate the standalone library into `stm32_canopen_reference` as an optional, pinned dependency. The original in-tree diagnostics should remain as a compatibility path initially, with a new CMake option such as `CANOPEN_REFERENCE_USE_STANDALONE_UDS`. Both paths should build and pass their existing tests before the duplicated implementation is retired. This integration has not been applied to the frozen original repository.
+## Issue status
 
-## Credential hygiene
-
-The GitHub credentials pasted during this task should be revoked and replaced because they were exposed in conversation. No credential was committed to the repository or stored in project files.
-
-## References
-
-[1]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp "Standalone STM32 UDS / ISO-TP repository"
-[2]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/actions/runs/32798943896 "Hosted standalone validation workflow run"
-[3]: https://www.iso.org/standard/66574.html "ISO 15765-2:2016 — Road vehicles — Diagnostic communication over CAN — Part 2"
-[4]: https://www.iso.org/standard/43464.html "ISO 14229-1 — Road vehicles — Unified diagnostic services"
+Issue #2 is the governing cleanup request. It should remain open until the cleanup commit is published and hosted CI verifies the final clean checkout. Issue #16 in the original `stm32_canopen_reference` repository remains independent and unchanged; its freeze and production-evidence status are not altered by this standalone cleanup.

@@ -1,8 +1,8 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
-#ifndef STM32_CANOPEN_UDS_DID_H
-#define STM32_CANOPEN_UDS_DID_H
+#ifndef STM32_UDS_ISO_TP_DID_H
+#define STM32_UDS_ISO_TP_DID_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -19,14 +19,14 @@
 #define UDS_DID_DEVICE_IDENTITY 0xF18AU
 #define UDS_DID_SERIAL_NUMBER 0xF18CU
 #define UDS_DID_HARDWARE_VERSION 0xF191U
-#define UDS_DID_CANOPEN_NODE_ID 0xF1A0U
+#define UDS_DID_CONTROLLER_ID 0xF1A0U
 #define UDS_DID_CAN_BITRATE 0xF1A1U
 #define UDS_DID_DIAGNOSTIC_STATUS 0xF1B0U
 #define UDS_DID_FIRMWARE_STATUS 0xF1B1U
 #define UDS_DID_RESET_CAUSE 0xF1B2U
 #define UDS_DID_WATCHDOG_STATUS 0xF1B3U
 #define UDS_DID_CAN_ERROR_COUNTERS 0xF1B4U
-#define UDS_DID_CANOPEN_ERROR_STATE 0xF1B5U
+#define UDS_DID_NETWORK_ERROR_STATE 0xF1B5U
 
 #define UDS_PROJECT_DID_COUNT 13U
 
@@ -72,14 +72,14 @@ typedef struct {
     UdsDidValue bootloader_version;
     UdsDidValue serial_number;
     UdsDidValue device_identity;
-    UdsDidValue canopen_node_id;
+    UdsDidValue controller_id;
     UdsDidValue can_bitrate;
     UdsDidValue diagnostic_status;
     UdsDidValue firmware_status;
     UdsDidValue reset_cause;
     UdsDidValue watchdog_status;
     UdsDidValue can_error_counters;
-    UdsDidValue canopen_error_state;
+    UdsDidValue network_error_state;
 } UdsProjectDidSource;
 
 typedef struct {

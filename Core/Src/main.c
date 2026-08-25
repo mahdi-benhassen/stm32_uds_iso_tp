@@ -21,24 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-/* CO_app_STM32.h transitively includes CANopenNode headers whose deliberate
- * narrowing idioms must not fail -Werror=conversion; keep this first parse
- * inside the same suppression region used across the project (see
- * App/Inc/canopen_reference_co.h). */
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#endif
-#include "CO_app_STM32.h"
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-#include "canopen_reference_board.h"
-#include "canopen_reference_config.h"
-#include "canopen_reference_port_fixup.h"
-#include "canopen_reference_timing.h"
-#include "canopen_reference_watchdog.h"
-
+#include "can_transport.h"
+#include "uds_app.h"
+#include "uds_platform.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,7 +47,7 @@ CAN_HandleTypeDef hcan1;
 TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
-static CANopenNodeSTM32 canopenInstance;
+static UdsCanTransport uds_transport;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,20 +62,13 @@ static void MX_TIM7_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define CANOPEN_REFERENCE_FAULT_UNHANDLED 0xEA110000UL
-
-void
-HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM7) {
-#if defined(CANOPEN_REFERENCE_ENABLE_TIMING_INSTRUMENTATION) && CANOPEN_REFERENCE_ENABLE_TIMING_INSTRUMENTATION
-        uint32_t tim7_start = CANopenReferenceTiming_Tim7Enter();
-        CANopenReferenceWatchdog_TickISR();
-        canopen_app_interrupt();
-        CANopenReferenceTiming_Tim7Exit(tim7_start);
-#else
-        CANopenReferenceWatchdog_TickISR();
-        canopen_app_interrupt();
-#endif
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
+    if (hcan != &hcan1)
+        return;
+    CAN_RxHeaderTypeDef header = {0};
+    uint8_t data[8] = {0};
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &header, data) == HAL_OK) {
+        uds_app_rx_from_isr(header.StdId, data, (uint8_t)header.DLC);
     }
 }
 /* USER CODE END 0 */
@@ -115,9 +93,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  CANopenReferenceTiming_Init();
-  CANopenReferenceBoard_InitSafe();
-  CANopenReferenceWatchdog_Init();
+  /* HAL_Init() provides the millisecond time base used by the endpoint. */
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -132,30 +108,19 @@ int main(void)
   MX_CAN1_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-  CanopenReferencePortFixup_Prepare(&hcan1);
-
-  canopenInstance.desiredNodeID = CANOPEN_REFERENCE_DEFAULT_NODE_ID;
-  canopenInstance.activeNodeID = 0U;
-  canopenInstance.baudrate = CANOPEN_REFERENCE_DEFAULT_BITRATE_KBPS;
-  canopenInstance.timerHandle = &htim7;
-  canopenInstance.CANHandle = &hcan1;
-  canopenInstance.HWInitFunction = MX_CAN1_Init;
-  canopenInstance.outStatusLEDGreen = 0U;
-  canopenInstance.outStatusLEDRed = 0U;
-  canopenInstance.canOpenStack = NULL;
-
-  if (canopen_app_init(&canopenInstance) != 0) {
-      Error_Handler();
+  uds_can_transport_init(&uds_transport, &hcan1, 0x7E0U, 0x7E8U);
+  uds_app_init(&uds_transport, uds_platform_now_ms());
+  if (HAL_CAN_Start(&hcan1) != HAL_OK ||
+      HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
+      uds_platform_error();
   }
-  CANopenReferenceBoard_OnCanopenReady();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    canopen_app_process();
-    CANopenReferenceWatchdog_Process();
+    uds_app_process(uds_platform_now_ms());
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -352,10 +317,6 @@ void MPU_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  CANopenReferenceBoard_ForceSafe();
-  /* Persist the fault across a warm reset; recoverable after reboot via
-   * CANopenReferenceWatchdog_PreviousFault(). */
-  CANopenReferenceWatchdog_RecordFatalFault(CANOPEN_REFERENCE_FAULT_UNHANDLED);
   __disable_irq();
   while (1)
   {

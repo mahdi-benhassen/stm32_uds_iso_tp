@@ -1,8 +1,8 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
-#ifndef STM32_CANOPEN_UDS_SECURITY_PROVIDER_H
-#define STM32_CANOPEN_UDS_SECURITY_PROVIDER_H
+#ifndef STM32_UDS_ISO_TP_SECURITY_PROVIDER_H
+#define STM32_UDS_ISO_TP_SECURITY_PROVIDER_H
 
 #include <stdbool.h>
 #include <stdint.h>

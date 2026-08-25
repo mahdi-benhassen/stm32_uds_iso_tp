@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #ifndef STM32_UDS_ISO_TP_UDS_H
 #define STM32_UDS_ISO_TP_UDS_H

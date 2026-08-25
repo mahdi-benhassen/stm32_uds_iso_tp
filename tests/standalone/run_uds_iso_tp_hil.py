@@ -45,7 +45,7 @@ def inventory(can_fd: bool) -> list[Evidence]:
         ("isotp_ff_4095_boundary", dlc, "1FFF000000000000", False),
         ("isotp_flow_control_wait_limit", 3, "310000", False),
         ("isotp_sequence_error", dlc, "2100000000000000", False),
-        ("canopen_concurrent_nmt_heartbeat_sdo_pdo_emcy", 8, "", False),
+        ("isotp_wrong_can_id", dlc, "", False),
     ]
     if can_fd:
         values += [
@@ -54,7 +54,7 @@ def inventory(can_fd: bool) -> list[Evidence]:
             ("isotp_canfd_brs_metadata", 64, "300000" + "00" * 61, False),
         ]
     return [
-        Evidence(name, profile, f"0x{0x7E0:03X}" if "canopen" not in name else "0x000",
+        Evidence(name, profile, f"0x{0x7E0:03X}",
                  "CAN-FD" if can_fd else "Classical CAN", item_dlc, data, None,
                  "not-executed", None, "NOT_EXECUTED", False, destructive)
         for name, item_dlc, data, destructive in values

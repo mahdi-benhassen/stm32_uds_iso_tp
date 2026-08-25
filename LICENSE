@@ -14,7 +14,7 @@ these permissions for the project-owned material covered by this license.
 
 "Project Material" means the project-owned source code, documentation,
 configuration, build files, scripts, tests, and other material in this
-repository that is marked with SPDX identifier LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0, or is otherwise
+repository that is marked with SPDX identifier LicenseRef-STM32-UDS-Research-Education-Commercial-1.0, or is otherwise
 identified as project-owned in the repository documentation. Project Material
 does not include Third-Party Material described in Section 5.
 
@@ -134,4 +134,4 @@ grants different terms in a separate written agreement. If any provision is
 held unenforceable, it shall be modified only to the minimum extent necessary,
 and the remaining provisions shall remain in effect.
 
-SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0

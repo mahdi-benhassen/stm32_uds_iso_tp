@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0
+ * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #include "uds_iso_tp/isotp.h"
 #include "uds_iso_tp/uds.h"

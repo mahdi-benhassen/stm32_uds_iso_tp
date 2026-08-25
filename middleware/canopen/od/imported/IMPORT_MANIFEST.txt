@@ -1,4 +1,0 @@
-source=/home/ubuntu/stm32f767-canopen-reference/Generated
-mode=--stage
-od_c_sha256=6be476f70a1b198c21d61d6928851a8e1a4f348512b13897e774a0f519a97acc
-od_h_sha256=4b8ba34da7b73d88eab306e2ee8789101f8d32b3ff3aa148edae118b840740ec

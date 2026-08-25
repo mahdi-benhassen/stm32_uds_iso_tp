@@ -6,16 +6,34 @@ on:
     paths:
       - 'library/**'
       - 'examples/**'
+      - 'App/**'
+      - 'Core/**'
+      - 'cmake/**'
       - 'tests/standalone/**'
-      - 'docs/standalone/**'
+      - 'tests/architecture/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'THIRD_PARTY.md'
+      - 'CMakeLists.txt'
+      - '*.ioc'
+      - '.gitmodules'
       - 'FINAL_REPORT.md'
       - '.github/workflows/standalone-uds.yml'
   pull_request:
     paths:
       - 'library/**'
       - 'examples/**'
+      - 'App/**'
+      - 'Core/**'
+      - 'cmake/**'
       - 'tests/standalone/**'
-      - 'docs/standalone/**'
+      - 'tests/architecture/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'THIRD_PARTY.md'
+      - 'CMakeLists.txt'
+      - '*.ioc'
+      - '.gitmodules'
       - 'FINAL_REPORT.md'
       - '.github/workflows/standalone-uds.yml'
 
@@ -28,7 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy cppcheck ninja-build
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy cppcheck ninja-build gcc-arm-none-eabi binutils-arm-none-eabi
+      - name: Architecture check
+        run: python3 tests/architecture/check_standalone_architecture.py
+      - name: STM32F767 root cross-build
+        run: |
+          cmake -S . -B build/stm32f767 -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/stm32f767 --parallel
       - name: Configure
         run: cmake -S library -B build/standalone -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DUDS_ISO_TP_MAX_PAYLOAD=16384
       - name: Build
