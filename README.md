@@ -1,75 +1,49 @@
-# STM32F767 CANopen — CubeMX Integration Branch
+# STM32 UDS / ISO-TP
 
-CANopen firmware for the **STM32F767**, built on the **STM32CubeMX-generated**
-project in this branch (`stm32f767_canopen.ioc`). The CubeMX base is kept
-regenerable: all CANopen integration lives in USER CODE sections, new
-project-owned directories, and the designated user areas of `CMakeLists.txt`.
+This repository was initialized from the frozen `stm32f767_canopen_cubemx` branch of [`stm32_canopen_reference`](https://github.com/mahdi-benhassen/stm32_canopen_reference). The initial commit preserves that CubeMX firmware snapshot. Subsequent commits add an independent, reusable UDS/ISO-TP library without a CANopenNode dependency.
 
-See [`PORTING.md`](PORTING.md) for the layer map and the deliberate
-peripheral fix-ups applied on top of the generated configuration.
+The project has two deliberate boundaries. The **library** in [`library/`](library/) provides protocol-neutral ISO-TP and UDS code with fixed storage and injected frame/clock callbacks. The **examples** in [`examples/`](examples/) show how a board project binds those callbacks to STM32F767 bxCAN for Classical CAN or to an FDCAN-capable STM32 HAL project for CAN FD. The copied CubeMX firmware remains available for integration work and is not silently replaced.
 
-## What this branch contains
+## Transport profiles
 
-- Pinned [CanOpenSTM32](https://github.com/CANopenNode/CanOpenSTM32)
-  submodule (`third_party/`) providing CANopenNode and the bxCAN binding.
-- Project runtime (`App/`): lifecycle wrapper, CiA 401 default personality,
-  dormant CiA 402/418/Inventus adapters, bounded bus-off recovery, CRC
-  dual-slot flash persistence, dual-rate watchdog with post-mortem fault
-  record, diagnostics, LSS policy, fail-closed gateway seam.
-- CiA 302 NMT-master helper and acceptance-filter policy
-  (`middleware/canopen/core`).
-- Full validation ecosystem ported from `main`: host unit tests, 105
-  conformance vectors, wire contracts, OD/product validators, release gates.
+| Profile | Frame support | Intended target | Status |
+|---|---|---|---|
+| Classical CAN | 8-byte CAN data, SF/FF/CF/FC, payloads up to the configured bound | STM32F767 bxCAN | Implemented and host-tested. |
+| CAN FD | 8/12/16/20/24/32/48/64-byte DLCs, CAN-FD SF escape, extended FF length above 4,095 bytes, optional BRS | FDCAN-capable STM32 or external CAN-FD controller | Implemented as a transport core and adapter contract; physical HIL requires the selected CAN-FD board. |
 
-## License
+The default standalone library bound is 16,384 bytes and all buffers are static. A product may lower this bound at configuration time after checking its memory budget. The STM32F767 example remains Classical CAN because the F767 project uses bxCAN rather than an integrated FDCAN peripheral.
 
-Project-owned material is available under the [STM32 CANopen Reference Research and Education License](LICENSE). It is free only for qualifying research and education; industrial, commercial, production, and large-scale use requires a separate paid commercial license. This is source-available and is not an OSI-approved Open Source license. See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for commercial licensing requests. Third-party components retain their upstream licenses as listed in [THIRD_PARTY.md](THIRD_PARTY.md).
-
-## Build
-
-Requires CMake + Ninja + GNU Arm Embedded toolchain. HAL/CMSIS are vendored
-in-repo (`Drivers/`) — no external Cube directory is needed.
+## Build the independent library
 
 ```sh
-cmake --preset Release
-cmake --build --preset Release --parallel
-arm-none-eabi-size build/Release/stm32f767_canopen.elf
+cmake -S library -B build-standalone -G Ninja \
+  -DUDS_ISO_TP_BUILD_TESTS=ON \
+  -DUDS_ISO_TP_MAX_PAYLOAD=16384
+cmake --build build-standalone --parallel
+ctest --test-dir build-standalone --output-on-failure
 ```
 
-Optional personalities mirror `main`:
-`-DCANOPEN_REFERENCE_ENABLE_CIA418=ON`,
-`-DCANOPEN_REFERENCE_ENABLE_INVENTUS_BATTERY=ON`,
-`-DCANOPEN_REFERENCE_ENABLE_CIA302_MASTER=ON`.
+The tests exercise Classical CAN framing, CAN-FD 64-byte Single Frames, extended First-Frame lengths above 4,095 bytes, reassembly, UDS service contracts, invalid FlowStatus, and bounded error handling. Sanitizer and static-analysis commands are described in [`docs/standalone/validation.md`](docs/standalone/validation.md).
 
-## Validation
+## Examples
 
-```sh
-python3 scripts/validate_repository.py
-python3 tests/test_firmware_configuration.py
-make -C tests/host all test-stm32-facade test-gateway-default-deny test-acceptance-filter
-```
+[`examples/stm32f767_bxcan/`](examples/stm32f767_bxcan/) contains the board binding contract for generated STM32F767 `HAL_CAN` projects. [`examples/stm32_fdcan/`](examples/stm32_fdcan/) contains the binding contract for a generated STM32 FDCAN project; it carries the CAN-FD data length and BRS metadata to the vendor HAL. These examples compile against the standalone library but intentionally do not invent vendor-generated clock, GPIO, NVIC, message-RAM, or linker files.
 
-CI (`.github/workflows/ci.yml`) runs static analysis, the host validation
-suite, and cross-builds every personality with memory-budget, coverage, and
-sanitizer gates.
+## Safety and production boundaries
 
-## UDS diagnostics
+The library has no heap allocation, blocking interrupt work, `printf` dependency, or CANopenNode dependency. UDS service callbacks, security, download memory policy, reset policy, and physical adapter behavior remain product-owned. The checked-in deterministic SecurityAccess provider is for tests, not production. No bootloader or authenticated Flash activation is claimed.
 
-The UDS profile is enabled by default in the current reference build and is a bounded classic-CAN ISO-TP and UDS reference subset. Disable it deliberately with `-DCANOPEN_REFERENCE_ENABLE_UDS=OFF` when a product policy requires that boundary. Start with the [UDS documentation index](docs/uds/), especially the [architecture](docs/uds/architecture.md), [ISO-TP](docs/uds/isotp.md), [services](docs/uds/services.md), [CubeMX integration](docs/uds/cubemx_integration.md), and [HIL testing](docs/uds/hil_testing.md) guides. The [STM32F767 hardware runner](tests/hardware/run_uds_stm32f767_acceptance.py) keeps reset and download operations disabled unless explicitly enabled. This branch does not claim complete ISO 14229 or ISO 15765-2 conformance, a production bootloader, or production cryptographic update security.
-
-## Hardware notes
-
-The generated pin map uses PI9 (CAN1_RX) / PA12 (CAN1_TX), as recorded in `stm32f767_canopen.ioc`. This differs from the main-branch reference documentation and must be reconciled with the actual board schematic before any hardware claim. Board bring-up,
-transceiver control, and application I/O remain board-specific weak hooks in
-`App/Src/canopen_reference_hw.c` and `canopen_reference_board.c`.
+## Documentation
 
 | Topic | Document |
 |---|---|
-| Porting layers and deviations | [PORTING.md](PORTING.md) |
-| Reproducible build | [BUILD.md](BUILD.md) |
-| License | [LICENSE](LICENSE) |
-| Dependencies and licenses | [THIRD_PARTY.md](THIRD_PARTY.md) |
-| Contribution process | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Security boundaries | [SECURITY.md](SECURITY.md) |
-| UDS/ISO-TP reference profile | [UDS documentation index](docs/uds/), including [architecture](docs/uds/architecture.md), [ISO-TP](docs/uds/isotp.md), [configuration](docs/uds/configuration.md), [CubeMX integration](docs/uds/cubemx_integration.md), and [HIL testing](docs/uds/hil_testing.md) |
-| Change history | [CHANGELOG.md](CHANGELOG.md) |
+| Library architecture | [`docs/standalone/architecture.md`](docs/standalone/architecture.md) |
+| Classical CAN and CAN-FD ISO-TP | [`docs/standalone/isotp.md`](docs/standalone/isotp.md) |
+| STM32 examples | [`docs/standalone/stm32_examples.md`](docs/standalone/stm32_examples.md) |
+| HIL and CAN-FD evidence | [`docs/standalone/hil.md`](docs/standalone/hil.md) |
+| Validation and release gates | [`docs/standalone/validation.md`](docs/standalone/validation.md) |
+| Release-readiness audit | [`docs/standalone/release_audit.md`](docs/standalone/release_audit.md) |
+| Original CubeMX snapshot | [`docs/uds/`](docs/uds/) and [`BUILD.md`](BUILD.md) |
+| Freeze baseline | [`issue16-classic-can-uds-cubemx-v1.0.0`](https://github.com/mahdi-benhassen/stm32_canopen_reference/releases/tag/issue16-classic-can-uds-cubemx-v1.0.0) |
+
+Project-owned source remains under the repository’s source-available license. Third-party and copied snapshot components retain their applicable upstream licensing and notices. Review [`LICENSE`](LICENSE) and [`THIRD_PARTY.md`](THIRD_PARTY.md) before redistribution.

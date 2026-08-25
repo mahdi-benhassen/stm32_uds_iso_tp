@@ -46,3 +46,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+
+# Standalone library local outputs
+build-standalone/
+build-reports/

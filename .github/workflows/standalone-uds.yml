@@ -1,0 +1,52 @@
+name: Standalone UDS ISO-TP validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'library/**'
+      - 'examples/**'
+      - 'tests/standalone/**'
+      - 'docs/standalone/**'
+      - '.github/workflows/standalone-uds.yml'
+  pull_request:
+    paths:
+      - 'library/**'
+      - 'examples/**'
+      - 'tests/standalone/**'
+      - 'docs/standalone/**'
+      - '.github/workflows/standalone-uds.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  library:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy cppcheck ninja-build
+      - name: Configure
+        run: cmake -S library -B build/standalone -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DUDS_ISO_TP_MAX_PAYLOAD=16384
+      - name: Build
+        run: cmake --build build/standalone --parallel
+      - name: CTest
+        run: ctest --test-dir build/standalone --output-on-failure
+      - name: Sanitizer build and test
+        run: |
+          cmake -S library -B build/sanitize -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=OFF -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g'
+          cmake --build build/sanitize --parallel
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/sanitize --output-on-failure
+      - name: Format check
+        run: clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/tests/isotp/*.c library/tests/uds/*.c
+      - name: Tidy and cppcheck
+        run: |
+          clang-tidy library/src/*.c -- -std=c11 -Ilibrary/include -Ilibrary/include/uds_iso_tp
+          cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c11 --inline-suppr --suppress=missingIncludeSystem -Ilibrary/include library/src library/tests
+      - name: HIL dry-run reports
+        run: |
+          python3 -m py_compile tests/standalone/run_uds_iso_tp_hil.py
+          mkdir -p build/reports
+          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --json build/reports/classic.json --csv build/reports/classic.csv --report build/reports/classic.md
+          python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --can-fd --json build/reports/fd.json --csv build/reports/fd.csv --report build/reports/fd.md
