@@ -154,7 +154,7 @@ static void test_flow_control_error_and_timeout(void) {
     assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
     IsoTpCanFrame overflow = flow_control(false, ISOTP_FC_OVERFLOW);
-    assert(uds_isotp_endpoint_receive(&endpoint, &overflow, 1U) == ISOTP_ERR_FLOW_CONTROL);
+    assert(uds_isotp_endpoint_receive(&endpoint, &overflow, 1U) == ISOTP_ERR_FLOW_OVERFLOW);
     assert(isotp_tx_state(&endpoint.tx) == ISOTP_TX_STATE_IDLE);
 
     assert(uds_isotp_endpoint_receive(&endpoint, &request, 2U) == ISOTP_TX_FRAME_READY);

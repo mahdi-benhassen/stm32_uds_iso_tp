@@ -160,7 +160,13 @@ static void test_flow_control_profile(bool can_fd) {
 
     start_long_transfer(&tx, &config, can_fd, &frame);
     IsoTpCanFrame overflow = fc_frame(can_fd, 0x7E0U, ISOTP_FC_OVERFLOW, 0U, 0U);
-    assert(isotp_tx_feed_flow_control(&tx, &overflow, 0U) == ISOTP_ERR_FLOW_CONTROL);
+    assert(isotp_tx_feed_flow_control(&tx, &overflow, 0U) == ISOTP_ERR_FLOW_OVERFLOW);
+    assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_IDLE);
+
+    start_long_transfer(&tx, &config, can_fd, &frame);
+    IsoTpCanFrame reserved_flow = fc_frame(can_fd, 0x7E0U, ISOTP_FC_CTS, 0U, 0U);
+    reserved_flow.data[0] = 0x33U;
+    assert(isotp_tx_feed_flow_control(&tx, &reserved_flow, 0U) == ISOTP_ERR_FLOW_CONTROL);
     assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_IDLE);
 }
 

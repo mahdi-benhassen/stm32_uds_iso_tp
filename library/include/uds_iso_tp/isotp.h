@@ -39,7 +39,8 @@ typedef enum {
     ISOTP_ERR_OVERFLOW,
     ISOTP_ERR_TIMEOUT,
     ISOTP_ERR_STATE,
-    ISOTP_ERR_FLOW_CONTROL
+    ISOTP_ERR_FLOW_CONTROL,
+    ISOTP_ERR_FLOW_OVERFLOW
 } IsoTpStatus;
 
 typedef enum {

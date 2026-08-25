@@ -285,7 +285,7 @@ IsoTpStatus isotp_tx_start(IsoTpTx *tx, const uint8_t *payload, uint32_t length,
     tx->next_sequence = 1U;
     tx->block_count = 0U;
     tx->deadline_ms = deadline(now_ms, tx->config.tx_timeout_ms);
-    if ((!tx->config.can_fd && (length <= 7U)) || (tx->config.can_fd && (length <= 7U))) {
+    if (length <= 7U) {
         clear_frame(frame, tx->response_id, &tx->config);
         frame->dlc = tx->config.can_fd ? fd_dl_for_length(length + 1U) : (uint8_t)(length + 1U);
         frame->data[0] = (uint8_t)length;
@@ -334,6 +334,10 @@ IsoTpStatus isotp_tx_feed_flow_control(IsoTpTx *tx, const IsoTpCanFrame *frame, 
     if ((frame->dlc < 3U) || ((frame->data[0] >> 4U) != 3U))
         return ISOTP_ERR_FORMAT;
     uint8_t flow = (uint8_t)(frame->data[0] & 0x0FU);
+    if (flow == ISOTP_FC_OVERFLOW) {
+        isotp_tx_reset(tx);
+        return ISOTP_ERR_FLOW_OVERFLOW;
+    }
     if ((flow != ISOTP_FC_CTS) && (flow != ISOTP_FC_WAIT)) {
         isotp_tx_reset(tx);
         return ISOTP_ERR_FLOW_CONTROL;
