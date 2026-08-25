@@ -39,7 +39,7 @@ The authoritative implementation is limited to `library/include/uds_iso_tp/` and
 
 The standalone host build passes all four CTest contracts. The sanitizer build passes the same contracts. The ISO-TP matrix covers Classical CAN and CAN FD, explicit TX states, CTS, bounded WAIT, immediate OVERFLOW, BS and STmin validation, reserved STmin rejection, wrong CAN ID, invalid DLC/PCI, timeout, and sequence errors. The architecture check passes for all tracked project paths, and the HIL runner’s Classical CAN and CAN-FD dry-run reports complete successfully.
 
-The cleaned STM32F767 root target was cross-built successfully with `arm-none-eabi-gcc`. The resulting Debug image used approximately 22.7 KiB of Flash and 38.2 KiB of RAM in the local generated target build. The hosted workflow must repeat this cross-build, architecture check, coverage instrumentation, sanitizer, static-analysis, and HIL dry-run sequence before the cleanup is considered published.
+The cleaned STM32F767 root target was cross-built successfully with `arm-none-eabi-gcc`. The resulting Debug image used approximately 22.7 KiB of Flash and 38.2 KiB of RAM in the local generated target build. Hosted workflow run [32802035769](https://github.com/mahdi-benhassen/stm32_uds_iso_tp/actions/runs/32802035769) for cleanup commit `b53cce6` completed successfully, including the architecture check, root cross-build, coverage instrumentation, sanitizer, static-analysis, and HIL dry-run sequence.
 
 ## Remaining limitations
 
@@ -47,4 +47,4 @@ A host or cross-build does not prove electrical signaling, transceiver behavior,
 
 ## Issue status
 
-Issue #2 is the governing cleanup request. It should remain open until the cleanup commit is published and hosted CI verifies the final clean checkout. Issue #16 in the original `stm32_canopen_reference` repository remains independent and unchanged; its freeze and production-evidence status are not altered by this standalone cleanup.
+Issue #2 is the governing cleanup request. The cleanup commit is published and hosted CI verifies the final clean checkout; the issue remains open for maintainer review rather than being closed automatically. Issue #16 in the original `stm32_canopen_reference` repository remains independent and unchanged; its freeze and production-evidence status are not altered by this standalone cleanup.
