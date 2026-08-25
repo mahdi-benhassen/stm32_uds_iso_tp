@@ -75,7 +75,7 @@ jobs:
           cmake -S library -B build/coverage -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DCMAKE_C_FLAGS='--coverage -O0 -g'
           cmake --build build/coverage --parallel
           ctest --test-dir build/coverage --output-on-failure
-          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\.c' --gcov-ignore-errors all --txt
+          gcovr --root . --object-directory build/coverage --filter 'library/src/.*\.c' --gcov-ignore-errors all --merge-mode-functions merge-use-line-0 --txt
       - name: Sanitizer build and test
         run: |
           cmake -S library -B build/sanitize -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=OFF -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g'

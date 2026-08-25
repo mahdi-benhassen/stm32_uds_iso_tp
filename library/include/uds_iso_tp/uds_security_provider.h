@@ -10,7 +10,16 @@
 #define UDS_SECURITY_PROVIDER_SEED_LENGTH 4U
 #define UDS_SECURITY_PROVIDER_MAX_KEY_LENGTH 16U
 #define UDS_SECURITY_PROVIDER_DEFAULT_MAX_ATTEMPTS 3U
+#define UDS_SECURITY_PROVIDER_DEFAULT_INITIAL_DELAY_MS 10000U
 #define UDS_SECURITY_PROVIDER_DEFAULT_LOCKOUT_MS 10000U
+#define UDS_SECURITY_PROVIDER_DEFAULT_SEED_TIMEOUT_MS 10000U
+
+typedef enum {
+    UDS_SECURITY_PROVIDER_STATE_LOCKED = 0,
+    UDS_SECURITY_PROVIDER_STATE_WAITING_FOR_KEY,
+    UDS_SECURITY_PROVIDER_STATE_UNLOCKED,
+    UDS_SECURITY_PROVIDER_STATE_DELAY
+} UdsSecurityProviderState;
 
 typedef enum {
     UDS_SECURITY_OK = 0,
@@ -32,7 +41,15 @@ typedef struct {
     uint8_t maximum_attempts;
     uint32_t lockout_ms;
     uint32_t lockout_until_ms;
+    uint32_t initial_delay_until_ms;
+    uint32_t seed_expiry_ms;
+    uint32_t initial_delay_ms;
+    uint32_t seed_timeout_ms;
     uint32_t deterministic_state;
+    UdsSecurityProviderState state;
+    bool initial_delay_active;
+    bool lockout_active;
+    bool seed_timer_active;
     bool seed_valid;
 } UdsSecurityProvider;
 
@@ -48,7 +65,9 @@ UdsSecurityResult uds_security_provider_verify_key(UdsSecurityProvider *provider
                                                    const uint8_t *key, uint16_t length,
                                                    uint32_t now_ms);
 void uds_security_provider_session_reset(UdsSecurityProvider *provider);
+void uds_security_provider_tick(UdsSecurityProvider *provider, uint32_t now_ms);
 bool uds_security_provider_is_locked(const UdsSecurityProvider *provider, uint32_t now_ms);
+UdsSecurityProviderState uds_security_provider_state(const UdsSecurityProvider *provider);
 uint8_t uds_security_provider_security_level(const UdsSecurityProvider *provider);
 uint8_t uds_security_provider_failed_attempts(const UdsSecurityProvider *provider);
 

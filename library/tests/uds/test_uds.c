@@ -196,13 +196,17 @@ static void test_uds(void) {
                              sizeof(response), 2U) == UDS_RESULT_OK);
     assert(response_len == 3U && response[0] == 0x7FU && response[2] == 0x31U);
 
+    uds_server_apply_reset(&server, UDS_RESET_PROGRAMMING, 10000U);
+    uint8_t session_request[] = {0x10U, UDS_SESSION_EXTENDED};
+    assert(uds_server_handle(&server, session_request, sizeof(session_request), response,
+                             &response_len, sizeof(response), 10000U) == UDS_RESULT_OK);
     uint8_t seed_request[] = {0x27U, 0x01U};
     assert(uds_server_handle(&server, seed_request, sizeof(seed_request), response, &response_len,
-                             sizeof(response), 3U) == UDS_RESULT_OK);
+                             sizeof(response), 10001U) == UDS_RESULT_OK);
     assert(response_len == 4U && response[0] == 0x67U && response[2] == 0x12U);
     uint8_t key_request[] = {0x27U, 0x02U, 0xCAU, 0xFEU};
     assert(uds_server_handle(&server, key_request, sizeof(key_request), response, &response_len,
-                             sizeof(response), 4U) == UDS_RESULT_OK);
+                             sizeof(response), 10002U) == UDS_RESULT_OK);
     assert(uds_server_security_level(&server) == 1U);
 
     uint8_t reset_request[] = {0x11U, 0x01U};

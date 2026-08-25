@@ -30,10 +30,30 @@
 #ifndef UDS_DEFAULT_S3_SERVER_MS
 #define UDS_DEFAULT_S3_SERVER_MS 5000U
 #endif
+#ifndef UDS_DEFAULT_SECURITY_INITIAL_DELAY_MS
+#define UDS_DEFAULT_SECURITY_INITIAL_DELAY_MS 10000U
+#endif
+#ifndef UDS_DEFAULT_SECURITY_LOCKOUT_MS
+#define UDS_DEFAULT_SECURITY_LOCKOUT_MS 10000U
+#endif
+#ifndef UDS_DEFAULT_SECURITY_SEED_TIMEOUT_MS
+#define UDS_DEFAULT_SECURITY_SEED_TIMEOUT_MS 10000U
+#endif
+#ifndef UDS_DEFAULT_SECURITY_MAX_ATTEMPTS
+#define UDS_DEFAULT_SECURITY_MAX_ATTEMPTS 3U
+#endif
 
 #define UDS_SESSION_DEFAULT 0x01U
 #define UDS_SESSION_PROGRAMMING 0x02U
 #define UDS_SESSION_EXTENDED 0x03U
+#define UDS_SESSION_SAFETY 0x04U
+
+#define UDS_SECURITY_LEVEL_1 1U
+#define UDS_SECURITY_LEVEL_5 5U
+#define UDS_SECURITY_REQUEST_SEED_LEVEL_1 0x01U
+#define UDS_SECURITY_SEND_KEY_LEVEL_1 0x02U
+#define UDS_SECURITY_REQUEST_SEED_LEVEL_5 0x09U
+#define UDS_SECURITY_SEND_KEY_LEVEL_5 0x0AU
 
 #define UDS_POSITIVE_RESPONSE_MASK 0x40U
 #define UDS_SUPPRESS_POSITIVE_RESPONSE 0x80U
@@ -96,6 +116,20 @@
 #ifndef UDS_ENABLE_CONTROL_DTC_SETTING
 #define UDS_ENABLE_CONTROL_DTC_SETTING 1U
 #endif
+
+typedef enum {
+    UDS_SESSION_TRANSITION_DENIED = 0,
+    UDS_SESSION_TRANSITION_ALLOWED = 1
+} UdsSessionTransitionResult;
+
+typedef enum {
+    UDS_SECURITY_STATE_LOCKED = 0,
+    UDS_SECURITY_STATE_WAITING_FOR_KEY,
+    UDS_SECURITY_STATE_UNLOCKED,
+    UDS_SECURITY_STATE_DELAY
+} UdsSecurityState;
+
+typedef enum { UDS_RESET_NORMAL = 0, UDS_RESET_PROGRAMMING } UdsResetReason;
 
 typedef enum {
     UDS_RESULT_OK = 0,
@@ -164,6 +198,21 @@ typedef struct {
     void *context;
     uint8_t session;
     uint8_t security_level;
+    UdsSecurityState security_state;
+    uint8_t security_failed_attempts;
+    uint8_t security_max_attempts;
+    uint8_t security_seed_level;
+    uint32_t security_initial_delay_until_ms;
+    uint32_t security_lockout_until_ms;
+    uint32_t security_seed_expiry_ms;
+    uint32_t security_initial_delay_ms;
+    uint32_t security_lockout_ms;
+    uint32_t security_seed_timeout_ms;
+    bool security_initial_delay_active;
+    bool security_lockout_active;
+    bool security_seed_timer_active;
+    bool security_seed_valid;
+    UdsResetReason pending_reset_reason;
     uint8_t next_download_block;
     uint16_t max_download_block_length;
     uint16_t p2_server_ms;
@@ -180,11 +229,22 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
 UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, uint16_t request_len,
                                     uint8_t *response, uint16_t *response_len, uint16_t capacity,
                                     uint32_t now_ms);
-UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms);
 void uds_server_reset_security(UdsServer *server);
+void uds_server_apply_reset(UdsServer *server, UdsResetReason reason, uint32_t now_ms);
+UdsSessionTransitionResult uds_session_transition_allowed(uint8_t current_session,
+                                                          uint8_t requested_session);
+UdsCallbackResult uds_server_request_session(UdsServer *server, uint8_t requested_session,
+                                             uint32_t now_ms);
+UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms);
 bool uds_server_reset_pending(const UdsServer *server);
 void uds_server_clear_reset(UdsServer *server);
 uint8_t uds_server_session(const UdsServer *server);
+UdsSecurityState uds_server_security_state(const UdsServer *server);
 uint8_t uds_server_security_level(const UdsServer *server);
+uint8_t uds_server_security_failed_attempts(const UdsServer *server);
+bool uds_server_security_seed_valid(const UdsServer *server);
+void uds_server_set_timing(UdsServer *server, uint32_t s3_timeout_ms,
+                           uint32_t security_initial_delay_ms, uint32_t security_lockout_ms,
+                           uint32_t security_seed_timeout_ms, uint8_t security_max_attempts);
 
 #endif

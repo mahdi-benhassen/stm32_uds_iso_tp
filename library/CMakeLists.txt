@@ -58,6 +58,11 @@ if(UDS_ISO_TP_BUILD_TESTS)
     target_compile_options(uds_iso_tp_uds_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_uds_contract COMMAND uds_iso_tp_uds_test)
 
+    add_executable(uds_iso_tp_session_security_test tests/uds/test_session_security.c)
+    target_link_libraries(uds_iso_tp_session_security_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_session_security_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_session_security_contract COMMAND uds_iso_tp_session_security_test)
+
     add_executable(uds_iso_tp_endpoint_test tests/uds/test_endpoint.c)
     target_link_libraries(uds_iso_tp_endpoint_test PRIVATE uds_iso_tp_uds)
     target_compile_options(uds_iso_tp_endpoint_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)

@@ -24,6 +24,14 @@ static uint8_t constant_time_equal(const uint8_t *left, const uint8_t *right, ui
     return difference == 0U;
 }
 
+static void invalidate_seed(UdsSecurityProvider *provider) {
+    provider->seed_valid = false;
+    provider->seed_timer_active = false;
+    if (provider->state == UDS_SECURITY_PROVIDER_STATE_WAITING_FOR_KEY) {
+        provider->state = UDS_SECURITY_PROVIDER_STATE_LOCKED;
+    }
+}
+
 void uds_security_provider_init(UdsSecurityProvider *provider, uint32_t deterministic_seed,
                                 uint8_t maximum_attempts, uint32_t lockout_ms) {
     if (provider == NULL) {
@@ -36,8 +44,16 @@ void uds_security_provider_init(UdsSecurityProvider *provider, uint32_t determin
         (maximum_attempts == 0U) ? UDS_SECURITY_PROVIDER_DEFAULT_MAX_ATTEMPTS : maximum_attempts;
     provider->lockout_ms =
         (lockout_ms == 0U) ? UDS_SECURITY_PROVIDER_DEFAULT_LOCKOUT_MS : lockout_ms;
+    provider->initial_delay_ms = UDS_SECURITY_PROVIDER_DEFAULT_INITIAL_DELAY_MS;
+    provider->seed_timeout_ms = UDS_SECURITY_PROVIDER_DEFAULT_SEED_TIMEOUT_MS;
     provider->lockout_until_ms = 0U;
+    provider->initial_delay_until_ms = provider->initial_delay_ms;
+    provider->seed_expiry_ms = 0U;
     provider->deterministic_state = (deterministic_seed == 0U) ? 0x13579BDFUL : deterministic_seed;
+    provider->state = UDS_SECURITY_PROVIDER_STATE_DELAY;
+    provider->initial_delay_active = provider->initial_delay_ms != 0U;
+    provider->lockout_active = false;
+    provider->seed_timer_active = false;
     provider->seed_valid = false;
     for (uint8_t index = 0U; index < UDS_SECURITY_PROVIDER_SEED_LENGTH; ++index) {
         provider->seed[index] = 0U;
@@ -47,8 +63,34 @@ void uds_security_provider_init(UdsSecurityProvider *provider, uint32_t determin
     }
 }
 
+void uds_security_provider_tick(UdsSecurityProvider *provider, uint32_t now_ms) {
+    if (provider == NULL) {
+        return;
+    }
+    if (provider->initial_delay_active &&
+        !deadline_active(now_ms, provider->initial_delay_until_ms)) {
+        provider->initial_delay_active = false;
+        if (!provider->lockout_active) {
+            provider->state = UDS_SECURITY_PROVIDER_STATE_LOCKED;
+        }
+    }
+    if (provider->lockout_active && !deadline_active(now_ms, provider->lockout_until_ms)) {
+        provider->lockout_active = false;
+        if (provider->failed_attempts > 0U) {
+            provider->failed_attempts--;
+        }
+        provider->state = UDS_SECURITY_PROVIDER_STATE_LOCKED;
+    }
+    if (provider->seed_timer_active && !deadline_active(now_ms, provider->seed_expiry_ms)) {
+        invalidate_seed(provider);
+    }
+}
+
 bool uds_security_provider_is_locked(const UdsSecurityProvider *provider, uint32_t now_ms) {
-    return (provider != NULL) && deadline_active(now_ms, provider->lockout_until_ms);
+    return (provider != NULL) &&
+           ((provider->initial_delay_active &&
+             deadline_active(now_ms, provider->initial_delay_until_ms)) ||
+            (provider->lockout_active && deadline_active(now_ms, provider->lockout_until_ms)));
 }
 
 UdsSecurityResult uds_security_provider_generate_seed(UdsSecurityProvider *provider, uint8_t level,
@@ -57,6 +99,7 @@ UdsSecurityResult uds_security_provider_generate_seed(UdsSecurityProvider *provi
     if ((provider == NULL) || (seed == NULL) || (length == NULL) || (level == 0U)) {
         return UDS_SECURITY_INVALID_ARGUMENT;
     }
+    uds_security_provider_tick(provider, now_ms);
     if (uds_security_provider_is_locked(provider, now_ms)) {
         return UDS_SECURITY_DELAY_ACTIVE;
     }
@@ -78,6 +121,9 @@ UdsSecurityResult uds_security_provider_generate_seed(UdsSecurityProvider *provi
     }
     provider->key_length = UDS_SECURITY_PROVIDER_SEED_LENGTH;
     provider->seed_valid = true;
+    provider->seed_timer_active = provider->seed_timeout_ms != 0U;
+    provider->seed_expiry_ms = now_ms + provider->seed_timeout_ms;
+    provider->state = UDS_SECURITY_PROVIDER_STATE_WAITING_FOR_KEY;
     *length = UDS_SECURITY_PROVIDER_SEED_LENGTH;
     return UDS_SECURITY_OK;
 }
@@ -88,6 +134,7 @@ UdsSecurityResult uds_security_provider_verify_key(UdsSecurityProvider *provider
     if ((provider == NULL) || (key == NULL) || (level == 0U)) {
         return UDS_SECURITY_INVALID_ARGUMENT;
     }
+    uds_security_provider_tick(provider, now_ms);
     if (uds_security_provider_is_locked(provider, now_ms)) {
         return UDS_SECURITY_DELAY_ACTIVE;
     }
@@ -99,17 +146,20 @@ UdsSecurityResult uds_security_provider_verify_key(UdsSecurityProvider *provider
     if (!valid) {
         provider->security_level = 0U;
         provider->failed_attempts = (uint8_t)(provider->failed_attempts + 1U);
-        provider->seed_valid = false;
+        invalidate_seed(provider);
         if (provider->failed_attempts >= provider->maximum_attempts) {
+            provider->lockout_active = provider->lockout_ms != 0U;
             provider->lockout_until_ms = now_ms + provider->lockout_ms;
-            provider->failed_attempts = 0U;
+            provider->state = provider->lockout_active ? UDS_SECURITY_PROVIDER_STATE_DELAY
+                                                       : UDS_SECURITY_PROVIDER_STATE_LOCKED;
             return UDS_SECURITY_ATTEMPTS_EXCEEDED;
         }
         return UDS_SECURITY_INVALID_KEY;
     }
     provider->security_level = level;
     provider->failed_attempts = 0U;
-    provider->seed_valid = false;
+    invalidate_seed(provider);
+    provider->state = UDS_SECURITY_PROVIDER_STATE_UNLOCKED;
     return UDS_SECURITY_OK;
 }
 
@@ -118,8 +168,13 @@ void uds_security_provider_session_reset(UdsSecurityProvider *provider) {
         return;
     }
     provider->security_level = 0U;
-    provider->failed_attempts = 0U;
-    provider->seed_valid = false;
+    invalidate_seed(provider);
+    provider->state = provider->lockout_active ? UDS_SECURITY_PROVIDER_STATE_DELAY
+                                               : UDS_SECURITY_PROVIDER_STATE_LOCKED;
+}
+
+UdsSecurityProviderState uds_security_provider_state(const UdsSecurityProvider *provider) {
+    return (provider != NULL) ? provider->state : UDS_SECURITY_PROVIDER_STATE_LOCKED;
 }
 
 uint8_t uds_security_provider_security_level(const UdsSecurityProvider *provider) {

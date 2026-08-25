@@ -9,6 +9,103 @@ static bool deadline_expired(uint32_t now_ms, uint32_t deadline_ms) {
     return (int32_t)(now_ms - deadline_ms) >= 0;
 }
 
+static bool session_supported(uint8_t session) {
+    return (session == UDS_SESSION_DEFAULT) || (session == UDS_SESSION_PROGRAMMING) ||
+           (session == UDS_SESSION_EXTENDED) || (session == UDS_SESSION_SAFETY);
+}
+
+static bool security_session_allowed(uint8_t session) {
+    return (session == UDS_SESSION_PROGRAMMING) || (session == UDS_SESSION_EXTENDED);
+}
+
+static bool security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed) {
+    if ((level == NULL) || (is_seed == NULL)) {
+        return false;
+    }
+    switch (subfunction) {
+    case UDS_SECURITY_REQUEST_SEED_LEVEL_1:
+        *level = UDS_SECURITY_LEVEL_1;
+        *is_seed = true;
+        return true;
+    case UDS_SECURITY_SEND_KEY_LEVEL_1:
+        *level = UDS_SECURITY_LEVEL_1;
+        *is_seed = false;
+        return true;
+    case UDS_SECURITY_REQUEST_SEED_LEVEL_5:
+        *level = UDS_SECURITY_LEVEL_5;
+        *is_seed = true;
+        return true;
+    case UDS_SECURITY_SEND_KEY_LEVEL_5:
+        *level = UDS_SECURITY_LEVEL_5;
+        *is_seed = false;
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void security_invalidate_seed(UdsServer *server) {
+    server->security_seed_valid = false;
+    server->security_seed_level = 0U;
+    server->security_seed_timer_active = false;
+    if (server->security_state == UDS_SECURITY_STATE_WAITING_FOR_KEY) {
+        server->security_state = UDS_SECURITY_STATE_LOCKED;
+    }
+}
+
+static void security_tick(UdsServer *server, uint32_t now_ms) {
+    if (server->security_initial_delay_active &&
+        deadline_expired(now_ms, server->security_initial_delay_until_ms)) {
+        server->security_initial_delay_active = false;
+        if (server->security_state == UDS_SECURITY_STATE_DELAY) {
+            server->security_state = UDS_SECURITY_STATE_LOCKED;
+        }
+    }
+    if (server->security_lockout_active &&
+        deadline_expired(now_ms, server->security_lockout_until_ms)) {
+        server->security_lockout_active = false;
+        if (server->security_failed_attempts > 0U) {
+            server->security_failed_attempts--;
+        }
+        if (server->security_state == UDS_SECURITY_STATE_DELAY) {
+            server->security_state = UDS_SECURITY_STATE_LOCKED;
+        }
+    }
+    if (server->security_seed_timer_active &&
+        deadline_expired(now_ms, server->security_seed_expiry_ms)) {
+        security_invalidate_seed(server);
+    }
+}
+
+static bool security_delay_active(const UdsServer *server, uint32_t now_ms) {
+    return server->security_initial_delay_active || server->security_lockout_active ||
+           ((server->security_state == UDS_SECURITY_STATE_DELAY) &&
+            !deadline_expired(now_ms, server->security_lockout_until_ms));
+}
+
+static void security_reset_for_ecu_reset(UdsServer *server, uint32_t now_ms,
+                                         UdsResetReason reason) {
+    server->security_level = 0U;
+    server->security_state = UDS_SECURITY_STATE_LOCKED;
+    server->security_failed_attempts = 0U;
+    server->security_seed_level = 0U;
+    server->security_seed_valid = false;
+    server->security_seed_timer_active = false;
+    server->security_lockout_active = false;
+    server->security_lockout_until_ms = 0U;
+    server->security_initial_delay_active =
+        (reason != UDS_RESET_PROGRAMMING) && (server->security_initial_delay_ms != 0U);
+    server->security_initial_delay_until_ms =
+        server->security_initial_delay_active ? now_ms + server->security_initial_delay_ms : now_ms;
+}
+
+static void security_reset_for_session_change(UdsServer *server) {
+    server->security_level = 0U;
+    security_invalidate_seed(server);
+    server->security_state =
+        server->security_lockout_active ? UDS_SECURITY_STATE_DELAY : UDS_SECURITY_STATE_LOCKED;
+}
+
 static uint16_t read_u16(const uint8_t *data) {
     return (uint16_t)(((uint16_t)data[0] << 8U) | data[1]);
 }
@@ -98,6 +195,21 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     server->context = context;
     server->session = UDS_SESSION_DEFAULT;
     server->security_level = 0U;
+    server->security_state = UDS_SECURITY_STATE_DELAY;
+    server->security_failed_attempts = 0U;
+    server->security_max_attempts = UDS_DEFAULT_SECURITY_MAX_ATTEMPTS;
+    server->security_seed_level = 0U;
+    server->security_initial_delay_ms = UDS_DEFAULT_SECURITY_INITIAL_DELAY_MS;
+    server->security_lockout_ms = UDS_DEFAULT_SECURITY_LOCKOUT_MS;
+    server->security_seed_timeout_ms = UDS_DEFAULT_SECURITY_SEED_TIMEOUT_MS;
+    server->security_initial_delay_active = true;
+    server->security_lockout_active = false;
+    server->security_seed_timer_active = false;
+    server->security_seed_valid = false;
+    server->security_initial_delay_until_ms = now_ms + server->security_initial_delay_ms;
+    server->security_lockout_until_ms = 0U;
+    server->security_seed_expiry_ms = 0U;
+    server->pending_reset_reason = UDS_RESET_NORMAL;
     server->next_download_block = 1U;
     server->max_download_block_length = 0U;
     server->p2_server_ms = UDS_DEFAULT_P2_SERVER_MS;
@@ -113,25 +225,94 @@ void uds_server_reset_security(UdsServer *server) {
     if (server == NULL) {
         return;
     }
-    server->security_level = 0U;
+    security_reset_for_session_change(server);
+}
+
+void uds_server_apply_reset(UdsServer *server, UdsResetReason reason, uint32_t now_ms) {
+    if (server == NULL) {
+        return;
+    }
+    server->session = UDS_SESSION_DEFAULT;
+    server->download_active = false;
+    server->next_download_block = 1U;
+    server->max_download_block_length = 0U;
+    server->reset_pending = false;
+    server->pending_reset_reason = UDS_RESET_NORMAL;
+    server->last_activity_ms = now_ms;
+    security_reset_for_ecu_reset(server, now_ms, reason);
+}
+
+UdsSessionTransitionResult uds_session_transition_allowed(uint8_t current_session,
+                                                          uint8_t requested_session) {
+    if (!session_supported(current_session) || !session_supported(requested_session)) {
+        return UDS_SESSION_TRANSITION_DENIED;
+    }
+    if (current_session == requested_session) {
+        return UDS_SESSION_TRANSITION_ALLOWED;
+    }
+    switch (current_session) {
+    case UDS_SESSION_DEFAULT:
+        return (requested_session == UDS_SESSION_EXTENDED) ? UDS_SESSION_TRANSITION_ALLOWED
+                                                           : UDS_SESSION_TRANSITION_DENIED;
+    case UDS_SESSION_EXTENDED:
+        return ((requested_session == UDS_SESSION_DEFAULT) ||
+                (requested_session == UDS_SESSION_PROGRAMMING))
+                   ? UDS_SESSION_TRANSITION_ALLOWED
+                   : UDS_SESSION_TRANSITION_DENIED;
+    case UDS_SESSION_PROGRAMMING:
+    case UDS_SESSION_SAFETY:
+        return (requested_session == UDS_SESSION_DEFAULT) ? UDS_SESSION_TRANSITION_ALLOWED
+                                                          : UDS_SESSION_TRANSITION_DENIED;
+    default:
+        return UDS_SESSION_TRANSITION_DENIED;
+    }
+}
+
+UdsCallbackResult uds_server_request_session(UdsServer *server, uint8_t requested_session,
+                                             uint32_t now_ms) {
+    if ((server == NULL) || !session_supported(requested_session)) {
+        return UDS_RESULT_OUT_OF_RANGE;
+    }
+    uint8_t current_session = server->session;
+    if (uds_session_transition_allowed(current_session, requested_session) !=
+        UDS_SESSION_TRANSITION_ALLOWED) {
+        return UDS_RESULT_DENIED;
+    }
+    security_tick(server, now_ms);
+    security_reset_for_session_change(server);
+    server->session = requested_session;
+    server->download_active = false;
+    server->next_download_block = 1U;
+    server->last_activity_ms = now_ms;
+    if (requested_session == UDS_SESSION_PROGRAMMING) {
+        server->reset_pending = true;
+        server->pending_reset_reason = UDS_RESET_PROGRAMMING;
+    } else if ((requested_session == UDS_SESSION_DEFAULT) &&
+               (current_session != UDS_SESSION_DEFAULT)) {
+        server->reset_pending = true;
+        server->pending_reset_reason = UDS_RESET_NORMAL;
+    }
+    return UDS_RESULT_OK;
 }
 
 static UdsCallbackResult service_session_control(UdsServer *server, const uint8_t *request,
                                                  uint16_t request_len, uint8_t *response,
-                                                 uint16_t *response_len, uint16_t capacity) {
+                                                 uint16_t *response_len, uint16_t capacity,
+                                                 uint32_t now_ms) {
 #if UDS_ENABLE_SESSION_CONTROL
     if (request_len != 2U) {
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
     uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
-    if ((subfunction != UDS_SESSION_DEFAULT) && (subfunction != UDS_SESSION_PROGRAMMING) &&
-        (subfunction != UDS_SESSION_EXTENDED)) {
+    if (!session_supported(subfunction)) {
         return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
                                  capacity);
     }
-    server->session = subfunction;
-    uds_server_reset_security(server);
+    UdsCallbackResult result = uds_server_request_session(server, subfunction, now_ms);
+    if (result != UDS_RESULT_OK) {
+        return negative_response(request, result_to_nrc(result), response, response_len, capacity);
+    }
     if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
         return UDS_RESULT_NO_RESPONSE;
     }
@@ -143,12 +324,14 @@ static UdsCallbackResult service_session_control(UdsServer *server, const uint8_
     response[1] = subfunction;
     response[2] = (uint8_t)(server->p2_server_ms >> 8U);
     response[3] = (uint8_t)server->p2_server_ms;
-    response[4] = (uint8_t)(server->p2_star_server_ms / 10U >> 8U);
-    response[5] = (uint8_t)(server->p2_star_server_ms / 10U);
+    uint16_t p2_star_10ms = (uint16_t)(server->p2_star_server_ms / 10U);
+    response[4] = (uint8_t)(p2_star_10ms >> 8U);
+    response[5] = (uint8_t)p2_star_10ms;
     *response_len = 6U;
     return UDS_RESULT_OK;
 #else
     (void)server;
+    (void)now_ms;
     return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
                              capacity);
 #endif
@@ -172,6 +355,7 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
         return callback_result(server, result, request, response, response_len, capacity);
     }
     server->reset_pending = true;
+    server->pending_reset_reason = UDS_RESET_NORMAL;
     if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
         return UDS_RESULT_NO_RESPONSE;
     }
@@ -264,20 +448,38 @@ static UdsCallbackResult service_read_data(UdsServer *server, const uint8_t *req
 
 static UdsCallbackResult service_security_access(UdsServer *server, const uint8_t *request,
                                                  uint16_t request_len, uint8_t *response,
-                                                 uint16_t *response_len, uint16_t capacity) {
+                                                 uint16_t *response_len, uint16_t capacity,
+                                                 uint32_t now_ms) {
 #if UDS_ENABLE_SECURITY_ACCESS
-    if ((request_len < 2U) || (server->callbacks.security_seed == NULL) ||
-        (server->callbacks.security_key == NULL)) {
+    if (request_len < 2U) {
+        return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
+                                 response, response_len, capacity);
+    }
+    if ((server->callbacks.security_seed == NULL) || (server->callbacks.security_key == NULL)) {
         return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
                                  capacity);
     }
+    security_tick(server, now_ms);
+    if (!security_session_allowed(server->session)) {
+        return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response,
+                                 response_len, capacity);
+    }
     uint8_t subfunction = request[1];
-    if ((subfunction == 0U) || (subfunction > 0x7FU)) {
+    uint8_t level = 0U;
+    bool is_seed = false;
+    if (!security_subfunction_level(subfunction, &level, &is_seed)) {
         return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
                                  capacity);
     }
-    uint8_t level = (uint8_t)((subfunction + 1U) / 2U);
-    if ((subfunction & 1U) != 0U) {
+    if (security_delay_active(server, now_ms)) {
+        return negative_response(request, UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED, response,
+                                 response_len, capacity);
+    }
+    if (is_seed) {
+        if (request_len != 2U) {
+            return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
+                                     response, response_len, capacity);
+        }
         uint16_t seed_length = 0U;
         UdsCallbackResult result =
             server->callbacks.security_seed(server->context, level, &response[2], &seed_length,
@@ -289,21 +491,43 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
             return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
                                      capacity);
         }
+        server->security_seed_level = level;
+        server->security_seed_valid = true;
+        server->security_seed_timer_active = server->security_seed_timeout_ms != 0U;
+        server->security_seed_expiry_ms = now_ms + server->security_seed_timeout_ms;
+        server->security_state = UDS_SECURITY_STATE_WAITING_FOR_KEY;
         response[0] = 0x67U;
         response[1] = subfunction;
         *response_len = (uint16_t)(2U + seed_length);
         return UDS_RESULT_OK;
     }
-    if (request_len <= 2U) {
-        return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
-                                 response, response_len, capacity);
+    if ((request_len <= 2U) || !server->security_seed_valid ||
+        (server->security_seed_level != level)) {
+        return negative_response(request, UDS_NRC_REQUEST_SEQUENCE_ERROR, response, response_len,
+                                 capacity);
     }
     UdsCallbackResult result = server->callbacks.security_key(server->context, level, &request[2],
                                                               (uint16_t)(request_len - 2U));
+    if (result == UDS_RESULT_INVALID_KEY) {
+        security_invalidate_seed(server);
+        server->security_level = 0U;
+        server->security_failed_attempts = (uint8_t)(server->security_failed_attempts + 1U);
+        if (server->security_failed_attempts >= server->security_max_attempts) {
+            server->security_lockout_active = server->security_lockout_ms != 0U;
+            server->security_lockout_until_ms = now_ms + server->security_lockout_ms;
+            server->security_state = UDS_SECURITY_STATE_DELAY;
+            return negative_response(request, UDS_NRC_EXCEEDED_NUMBER_OF_ATTEMPTS, response,
+                                     response_len, capacity);
+        }
+        return negative_response(request, UDS_NRC_INVALID_KEY, response, response_len, capacity);
+    }
     if (result != UDS_RESULT_OK) {
         return callback_result(server, result, request, response, response_len, capacity);
     }
     server->security_level = level;
+    server->security_failed_attempts = 0U;
+    security_invalidate_seed(server);
+    server->security_state = UDS_SECURITY_STATE_UNLOCKED;
     if (capacity < 2U) {
         return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
                                  capacity);
@@ -314,6 +538,7 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
     return UDS_RESULT_OK;
 #else
     (void)server;
+    (void)now_ms;
     return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
                              capacity);
 #endif
@@ -612,7 +837,7 @@ UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, u
     switch (service) {
     case 0x10U:
         return service_session_control(server, request, request_len, response, response_len,
-                                       capacity);
+                                       capacity, now_ms);
     case 0x11U:
         return service_ecu_reset(server, request, request_len, response, response_len, capacity);
     case 0x19U:
@@ -621,7 +846,7 @@ UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, u
         return service_read_data(server, request, request_len, response, response_len, capacity);
     case 0x27U:
         return service_security_access(server, request, request_len, response, response_len,
-                                       capacity);
+                                       capacity, now_ms);
     case 0x28U:
         return service_communication_control(server, request, request_len, response, response_len,
                                              capacity);
@@ -652,14 +877,39 @@ UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms) {
     if (server == NULL) {
         return UDS_RESULT_ERROR;
     }
-    if (deadline_expired(now_ms, server->last_activity_ms + server->s3_server_timeout_ms)) {
+    security_tick(server, now_ms);
+    if ((uint32_t)(now_ms - server->last_activity_ms) >= server->s3_server_timeout_ms) {
         server->session = UDS_SESSION_DEFAULT;
-        uds_server_reset_security(server);
+        security_reset_for_session_change(server);
         server->download_active = false;
         server->next_download_block = 1U;
+        server->last_activity_ms = now_ms;
         return UDS_RESULT_BUSY;
     }
     return UDS_RESULT_OK;
+}
+
+void uds_server_set_timing(UdsServer *server, uint32_t s3_timeout_ms,
+                           uint32_t security_initial_delay_ms, uint32_t security_lockout_ms,
+                           uint32_t security_seed_timeout_ms, uint8_t security_max_attempts) {
+    if (server == NULL) {
+        return;
+    }
+    server->s3_server_timeout_ms = s3_timeout_ms;
+    server->security_initial_delay_ms = security_initial_delay_ms;
+    server->security_lockout_ms = security_lockout_ms;
+    server->security_seed_timeout_ms = security_seed_timeout_ms;
+    if (server->security_initial_delay_active) {
+        server->security_initial_delay_active = security_initial_delay_ms != 0U;
+        server->security_initial_delay_until_ms =
+            server->last_activity_ms + security_initial_delay_ms;
+        if (!server->security_initial_delay_active &&
+            (server->security_state == UDS_SECURITY_STATE_DELAY)) {
+            server->security_state = UDS_SECURITY_STATE_LOCKED;
+        }
+    }
+    server->security_max_attempts =
+        (security_max_attempts == 0U) ? UDS_DEFAULT_SECURITY_MAX_ATTEMPTS : security_max_attempts;
 }
 
 bool uds_server_reset_pending(const UdsServer *server) {
@@ -676,6 +926,18 @@ uint8_t uds_server_session(const UdsServer *server) {
     return (server != NULL) ? server->session : UDS_SESSION_DEFAULT;
 }
 
+UdsSecurityState uds_server_security_state(const UdsServer *server) {
+    return (server != NULL) ? server->security_state : UDS_SECURITY_STATE_LOCKED;
+}
+
 uint8_t uds_server_security_level(const UdsServer *server) {
     return (server != NULL) ? server->security_level : 0U;
+}
+
+uint8_t uds_server_security_failed_attempts(const UdsServer *server) {
+    return (server != NULL) ? server->security_failed_attempts : 0U;
+}
+
+bool uds_server_security_seed_valid(const UdsServer *server) {
+    return (server != NULL) && server->security_seed_valid;
 }
