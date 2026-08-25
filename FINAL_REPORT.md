@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The standalone repository is now published at [`mahdi-benhassen/stm32_uds_iso_tp`][1]. Its first commit, `01a7bd6`, is the exact snapshot of the `stm32f767_canopen_cubemx` baseline requested by the project owner. The independent implementation was then layered on top in commit `57480be`, which is now the remote `main` tip.
+The standalone repository is now published at [`mahdi-benhassen/stm32_uds_iso_tp`][1]. Its first commit, `01a7bd6`, is the exact snapshot of the `stm32f767_canopen_cubemx` baseline requested by the project owner. The independent implementation was then layered on top in commit `57480be`. The final remote `main` tip is `873b3ab`, which adds the release report and ensures documentation-only changes are covered by the same workflow.
 
 The original `stm32_canopen_reference` implementation was not reverted or deleted. Its Issue #16 work remains frozen and tagged in the original repository, and Issue #16 remains open because physical production evidence is incomplete.
 
@@ -24,7 +24,7 @@ The original `stm32_canopen_reference` implementation was not reverted or delete
 
 The local strict build completed successfully with all **four of four CTest contracts passing**. The sanitizer build also completed with all four tests passing. clang-format, clang-tidy, cppcheck, Python bytecode compilation, and both Classical CAN and CAN-FD HIL dry-run profiles completed successfully.
 
-The hosted workflow [`Standalone UDS ISO-TP validation`][2] for commit `57480be` completed successfully. This proves reproducible host-side and adapter-contract validation in GitHub Actions; it does not prove electrical signaling, vendor HAL configuration, target interrupt latency, or physical interoperability.
+The hosted workflow [`Standalone UDS ISO-TP validation`][2] for the final commit `873b3ab` completed successfully. This proves reproducible host-side and adapter-contract validation in GitHub Actions; it does not prove electrical signaling, vendor HAL configuration, target interrupt latency, or physical interoperability.
 
 ## Deliberate boundaries
 
@@ -45,6 +45,6 @@ The GitHub credentials pasted during this task should be revoked and replaced be
 ## References
 
 [1]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp "Standalone STM32 UDS / ISO-TP repository"
-[2]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/actions/runs/32798716258 "Hosted standalone validation workflow run"
+[2]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/actions/runs/32798943896 "Hosted standalone validation workflow run"
 [3]: https://www.iso.org/standard/66574.html "ISO 15765-2:2016 — Road vehicles — Diagnostic communication over CAN — Part 2"
 [4]: https://www.iso.org/standard/43464.html "ISO 14229-1 — Road vehicles — Unified diagnostic services"
