@@ -12,9 +12,9 @@ The diagnostic path is deliberately separated into four layers:
 
 | Layer | Repository component | Responsibility |
 |---|---|---|
-| CAN controller integration | `middleware/diagnostics/uds_stm32/` | Bounded ISR-to-mainline RX queue, FIFO1 filtering, non-blocking mailbox submission, overflow and timeout statistics. |
-| ISO-TP | `middleware/diagnostics/isotp/` | Classic-CAN single-frame and multi-frame segmentation, flow control, block size, STmin, sequence counters, and timeouts. |
-| UDS server | `middleware/diagnostics/uds/uds.c` | Service dispatch, sessions, NRC encoding, response-size checks, and callback contracts. |
+| CAN controller integration | `library/compat/legacy_diagnostics/uds_stm32/` | Bounded ISR-to-mainline RX queue, FIFO1 filtering, non-blocking mailbox submission, overflow and timeout statistics. |
+| ISO-TP | `library/compat/legacy_diagnostics/isotp/` | Classic-CAN single-frame and multi-frame segmentation, flow control, block size, STmin, sequence counters, and timeouts. |
+| UDS server | `library/compat/legacy_diagnostics/uds/uds.c` | Service dispatch, sessions, NRC encoding, response-size checks, and callback contracts. |
 | Product policy | `uds_did.*`, `uds_security_provider.*`, `uds_download.*`, `App/Src/canopen_reference_uds.c` | DIDs, access permissions, security provider, memory policy, callbacks, and board lifecycle decisions. |
 
 The ISR layer copies frames and publishes them to a bounded queue. It must not run UDS callbacks, access Flash, perform long computations, or call diagnostic application code. The mainline invokes `CANopenReference_UDS_Process()` after `CO_process()`, which drains a fixed budget, performs protocol work, and submits a fixed TX budget.

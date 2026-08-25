@@ -27,8 +27,8 @@ python3 scripts/validate_repository.py
 cppcheck --enable=warning,performance,portability --error-exitcode=1 \
   --inline-suppr --suppress=missingIncludeSystem --suppress=unusedFunction \
   --std=c11 -I App/Inc -I middleware/canopen/core \
-  -I middleware/diagnostics/isotp -I middleware/diagnostics/uds \
-  -I middleware/diagnostics/uds_stm32 App/Src middleware/diagnostics
+  -I library/compat/legacy_diagnostics/isotp -I library/compat/legacy_diagnostics/uds \
+  -I library/compat/legacy_diagnostics/uds_stm32 App/Src library/compat/legacy_diagnostics
 PYTHONPATH=tests/hardware python3 tests/hardware/run_stm32f767_uds_acceptance.py --dry-run
 ```
 

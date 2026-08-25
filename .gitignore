@@ -50,3 +50,9 @@ __pycache__/
 # Standalone library local outputs
 build-standalone/
 build-reports/
+build-flow-audit/
+build-flow-coverage/
+build-legacy-compat/
+build-flow-final/
+build-flow-sanitize/
+build-flow-reports/

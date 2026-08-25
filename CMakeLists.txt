@@ -100,12 +100,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     middleware/canopen/core/can_acceptance_filter.c
     middleware/canopen/core/canopen_core.c
     middleware/canopen/core/cia302_nmt_master.c
-    middleware/diagnostics/isotp/isotp.c
-    middleware/diagnostics/uds/uds.c
-    middleware/diagnostics/uds/uds_did.c
-    middleware/diagnostics/uds/uds_security_provider.c
-    middleware/diagnostics/uds/uds_download.c
-    middleware/diagnostics/uds_stm32/uds_stm32.c
+    library/compat/legacy_diagnostics/isotp/isotp.c
+    library/compat/legacy_diagnostics/uds/uds.c
+    library/compat/legacy_diagnostics/uds/uds_did.c
+    library/compat/legacy_diagnostics/uds/uds_security_provider.c
+    library/compat/legacy_diagnostics/uds/uds_download.c
+    library/compat/legacy_diagnostics/uds_stm32/uds_stm32.c
     ${CANOPEN_REFERENCE_OD_SOURCE}
     ${CANOPEN_STM32_DIR}/CANopenNode_STM32/CO_driver_STM32.c
     ${CANOPEN_NODE_DIR}/CANopen.c
@@ -118,9 +118,9 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     App/Inc
     Generated
     middleware/canopen/core
-    middleware/diagnostics/isotp
-    middleware/diagnostics/uds
-    middleware/diagnostics/uds_stm32
+    library/compat/legacy_diagnostics/isotp
+    library/compat/legacy_diagnostics/uds
+    library/compat/legacy_diagnostics/uds_stm32
     ${CANOPEN_STM32_DIR}/CANopenNode_STM32
     ${CANOPEN_NODE_DIR}
     ${CANOPEN_NODE_DIR}/301

@@ -2,7 +2,7 @@
 
 ## Policy-first design
 
-The reference server treats diagnostic data exposure and mutation as product policy. The table-driven DID registry in `middleware/diagnostics/uds/uds_did.*` associates each identifier with read/write permissions, minimum session, minimum security level, maximum value length, and a source binding. The registry does not discover memory by address and does not expose arbitrary Object Dictionary or RAM locations.
+The reference server treats diagnostic data exposure and mutation as product policy. The table-driven DID registry in `library/compat/legacy_diagnostics/uds/uds_did.*` associates each identifier with read/write permissions, minimum session, minimum security level, maximum value length, and a source binding. The registry does not discover memory by address and does not expose arbitrary Object Dictionary or RAM locations.
 
 A product integration must replace the reference values with authoritative, lifecycle-owned data. The default runtime exposes bounded reference identity and status views so that the transport and service paths can be tested without claiming a production identity, cryptographic policy, or bootloader implementation.
 

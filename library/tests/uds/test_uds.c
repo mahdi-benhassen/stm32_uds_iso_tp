@@ -131,7 +131,7 @@ static void test_isotp(void) {
     assert(event.has_flow_control && event.flow_control.data[0] == 0x30U);
     assert(isotp_tx_feed_flow_control(&tx, &event.flow_control, 0U) == ISOTP_OK);
     uint8_t expected_sequence = 1U;
-    while (tx.active) {
+    while (isotp_tx_state(&tx) != ISOTP_TX_STATE_IDLE) {
         IsoTpStatus status = isotp_tx_next(&tx, 0U, &frame);
         if (status == ISOTP_OK) {
             status = isotp_tx_next(&tx, 1U, &frame);

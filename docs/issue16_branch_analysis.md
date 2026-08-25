@@ -22,7 +22,7 @@ The branch comparison shows that `main` is the established reference architectur
 
 ## Existing diagnostic and protocol code
 
-The repository already contains `middleware/diagnostics/uds_isotp.py`, `tests/test_uds_isotp.py`, and `tests/run_uds_isotp_contract.py`. The Python module is explicitly a deterministic host-side contract model. It supports a small ISO-TP/UDS test surface, including single-frame and multi-frame helpers, session control, ECU reset, tester present, read/write DID callbacks, and basic negative responses. Its module documentation explicitly states that the STM32F767 firmware contains no embedded ISO-TP transport or UDS server. It must therefore be treated as a test oracle and contract reference, not copied blindly into firmware.
+The repository already contains `library/compat/legacy_diagnostics/uds_isotp.py`, `tests/test_uds_isotp.py`, and `tests/run_uds_isotp_contract.py`. The Python module is explicitly a deterministic host-side contract model. It supports a small ISO-TP/UDS test surface, including single-frame and multi-frame helpers, session control, ECU reset, tester present, read/write DID callbacks, and basic negative responses. Its module documentation explicitly states that the STM32F767 firmware contains no embedded ISO-TP transport or UDS server. It must therefore be treated as a test oracle and contract reference, not copied blindly into firmware.
 
 The existing embedded diagnostics layer is `App/Src/canopen_reference_diagnostics.c` with its public header. It reports bounded CAN hardware and runtime diagnostic state from mainline code and may emit optional UART diagnostics on a periodic schedule. It is not a UDS service dispatcher, ISO-TP transport, DID registry, security provider, or download manager. The new implementation should use it only as an error/status integration point.
 
@@ -34,8 +34,8 @@ The following layers are natural candidates for one protocol-neutral implementat
 
 | Shared layer | Proposed contents |
 |---|---|
-| `middleware/diagnostics/isotp/` | Classic-CAN ISO-TP state machines, frame parsing, SF/FF/CF/FC handling, block size, STmin, sequence validation, bounded payload storage, and timeout state. No STM32 HAL symbols and no CANopenNode symbols. |
-| `middleware/diagnostics/uds/` | UDS request dispatch, session state, NRC generation, table-driven DIDs, SecurityAccess provider interface, download state machine interface, and compile-time service switches. |
+| `library/compat/legacy_diagnostics/isotp/` | Classic-CAN ISO-TP state machines, frame parsing, SF/FF/CF/FC handling, block size, STmin, sequence validation, bounded payload storage, and timeout state. No STM32 HAL symbols and no CANopenNode symbols. |
+| `library/compat/legacy_diagnostics/uds/` | UDS request dispatch, session state, NRC generation, table-driven DIDs, SecurityAccess provider interface, download state machine interface, and compile-time service switches. |
 | Host tests | Pure C tests for ISO-TP and UDS state transitions, malformed frames, timeouts, overflow, NRCs, and bounded-resource behavior. Existing Python contracts can remain as a separate interoperability reference. |
 | Project configuration | Service-enable macros, request/response CAN identifiers, payload limits, timer tick units, processing budgets, and default-disabled UDS profile settings. |
 | Documentation | Protocol behavior, configuration, CAN coexistence policy, security limitations, download boundaries, and test evidence. |
@@ -106,7 +106,7 @@ The adapter should be integrated below the existing CANopen application owner, n
 
 ## Sources inspected
 
-1. [Repository main branch](https://github.com/mahdi-benhassen/stm32_canopen_reference/tree/main), including `README.md`, `CMakeLists.txt`, `middleware/diagnostics/uds_isotp.py`, existing application diagnostics, CANopen integration, linker script, tests, and CI workflow.
+1. [Repository main branch](https://github.com/mahdi-benhassen/stm32_canopen_reference/tree/main), including `README.md`, `CMakeLists.txt`, `library/compat/legacy_diagnostics/uds_isotp.py`, existing application diagnostics, CANopen integration, linker script, tests, and CI workflow.
 2. [STM32F767 CubeMX branch](https://github.com/mahdi-benhassen/stm32_canopen_reference/tree/stm32f767_canopen_cubemx), including `stm32f767_canopen.ioc`, generated `Core/` and `Drivers/` files, `CMakePresets.json`, CubeMX CMake configuration, linker script, application integration, tests, and CI workflow.
 3. [Issue #16](https://github.com/mahdi-benhassen/stm32_canopen_reference/issues/16), the requested UDS ISO 14229 and STM32F767 example scope.
 4. [CANopenNode](https://github.com/CANopenNode/CANopenNode) and [CanOpenSTM32](https://github.com/CANopenNode/CanOpenSTM32), the pinned upstream CANopen integration sources listed by the repository’s `THIRD_PARTY.md`.

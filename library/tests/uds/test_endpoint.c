@@ -112,7 +112,7 @@ static void run_multiframe_profile(bool can_fd, uint8_t response_size) {
     IsoTpCanFrame fc = flow_control(can_fd, ISOTP_FC_CTS);
     assert(uds_isotp_endpoint_receive(&endpoint, &fc, 1U) == ISOTP_OK);
     uint8_t sequence = 1U;
-    while (endpoint.tx.active || endpoint.tx_pending) {
+    while ((isotp_tx_state(&endpoint.tx) != ISOTP_TX_STATE_IDLE) || endpoint.tx_pending) {
         size_t before = sink.count;
         (void)uds_isotp_endpoint_process(&endpoint, 1U);
         if (sink.count == before) {
@@ -155,12 +155,12 @@ static void test_flow_control_error_and_timeout(void) {
     assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
     IsoTpCanFrame overflow = flow_control(false, ISOTP_FC_OVERFLOW);
     assert(uds_isotp_endpoint_receive(&endpoint, &overflow, 1U) == ISOTP_ERR_FLOW_CONTROL);
-    assert(!endpoint.tx.active);
+    assert(isotp_tx_state(&endpoint.tx) == ISOTP_TX_STATE_IDLE);
 
     assert(uds_isotp_endpoint_receive(&endpoint, &request, 2U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_process(&endpoint, 2U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_tick(&endpoint, 2001U) == ISOTP_ERR_TIMEOUT);
-    assert(!endpoint.tx.active);
+    assert(isotp_tx_state(&endpoint.tx) == ISOTP_TX_STATE_IDLE);
 }
 
 int main(void) {

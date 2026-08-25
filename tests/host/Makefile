@@ -24,46 +24,46 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 UDS_INCLUDES := -I$(ROOT)/tests/fakes -I$(ROOT)/App/Inc \
-	-I$(ROOT)/middleware/diagnostics/isotp -I$(ROOT)/middleware/diagnostics/uds \
-	-I$(ROOT)/middleware/diagnostics/uds_stm32
+	-I$(ROOT)/library/compat/legacy_diagnostics/isotp -I$(ROOT)/library/compat/legacy_diagnostics/uds \
+	-I$(ROOT)/library/compat/legacy_diagnostics/uds_stm32
 UDS_FLAGS := -DUSE_HAL_CAN_REGISTER_CALLBACKS=1
-UDS_CORE_SRCS := $(ROOT)/middleware/diagnostics/isotp/isotp.c \
-	$(ROOT)/middleware/diagnostics/uds/uds.c
+UDS_CORE_SRCS := $(ROOT)/library/compat/legacy_diagnostics/isotp/isotp.c \
+	$(ROOT)/library/compat/legacy_diagnostics/uds/uds.c
 UDS_TEST_BINS := $(BUILD_DIR)/test_isotp_contract $(BUILD_DIR)/test_uds_core \
 	$(BUILD_DIR)/test_uds_adversarial $(BUILD_DIR)/test_uds_did \
 	$(BUILD_DIR)/test_uds_security_provider $(BUILD_DIR)/test_uds_download \
 	$(BUILD_DIR)/test_uds_stm32 $(BUILD_DIR)/test_uds_runtime \
 	$(BUILD_DIR)/test_uds_canopen_coexistence
 
-$(BUILD_DIR)/test_isotp_contract: $(ROOT)/tests/isotp/test_isotp_contract.c $(ROOT)/middleware/diagnostics/isotp/isotp.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(ROOT)/middleware/diagnostics/isotp $^ -o $@
+$(BUILD_DIR)/test_isotp_contract: $(ROOT)/tests/isotp/test_isotp_contract.c $(ROOT)/library/compat/legacy_diagnostics/isotp/isotp.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(ROOT)/library/compat/legacy_diagnostics/isotp $^ -o $@
 
 $(BUILD_DIR)/test_uds_core: $(ROOT)/tests/uds/test_uds_core.c $(UDS_CORE_SRCS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_INCLUDES) $^ -o $@
 
-$(BUILD_DIR)/test_uds_adversarial: $(ROOT)/tests/uds/test_uds_adversarial.c $(UDS_CORE_SRCS) $(ROOT)/middleware/diagnostics/uds/uds_security_provider.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_uds_adversarial: $(ROOT)/tests/uds/test_uds_adversarial.c $(UDS_CORE_SRCS) $(ROOT)/library/compat/legacy_diagnostics/uds/uds_security_provider.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_INCLUDES) $^ -o $@
 
-$(BUILD_DIR)/test_uds_did: $(ROOT)/tests/uds/test_uds_did.c $(ROOT)/middleware/diagnostics/uds/uds_did.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_uds_did: $(ROOT)/tests/uds/test_uds_did.c $(ROOT)/library/compat/legacy_diagnostics/uds/uds_did.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_INCLUDES) $^ -o $@
 
-$(BUILD_DIR)/test_uds_security_provider: $(ROOT)/tests/uds/test_uds_security_provider.c $(ROOT)/middleware/diagnostics/uds/uds_security_provider.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_uds_security_provider: $(ROOT)/tests/uds/test_uds_security_provider.c $(ROOT)/library/compat/legacy_diagnostics/uds/uds_security_provider.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_INCLUDES) $^ -o $@
 
-$(BUILD_DIR)/test_uds_download: $(ROOT)/tests/uds/test_uds_download.c $(ROOT)/middleware/diagnostics/uds/uds_download.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_uds_download: $(ROOT)/tests/uds/test_uds_download.c $(ROOT)/library/compat/legacy_diagnostics/uds/uds_download.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_INCLUDES) $^ -o $@
 
-$(BUILD_DIR)/test_uds_stm32: $(ROOT)/tests/uds/test_uds_stm32.c $(ROOT)/middleware/diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_uds_stm32: $(ROOT)/tests/uds/test_uds_stm32.c $(ROOT)/library/compat/legacy_diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_FLAGS) $(UDS_INCLUDES) $^ -o $@
 
 $(BUILD_DIR)/test_uds_runtime: $(ROOT)/tests/uds/test_uds_runtime.c $(ROOT)/tests/fakes/canopen_reference_timing_stub.c \
 	$(ROOT)/App/Src/canopen_reference_uds.c $(UDS_CORE_SRCS) \
-	$(ROOT)/middleware/diagnostics/uds/uds_did.c $(ROOT)/middleware/diagnostics/uds/uds_security_provider.c \
-	$(ROOT)/middleware/diagnostics/uds/uds_download.c $(ROOT)/middleware/diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
+	$(ROOT)/library/compat/legacy_diagnostics/uds/uds_did.c $(ROOT)/library/compat/legacy_diagnostics/uds/uds_security_provider.c \
+	$(ROOT)/library/compat/legacy_diagnostics/uds/uds_download.c $(ROOT)/library/compat/legacy_diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_FLAGS) -DCANOPEN_REFERENCE_ENABLE_UDS=1 $(UDS_INCLUDES) $^ -o $@
 
 $(BUILD_DIR)/test_uds_canopen_coexistence: $(ROOT)/tests/integration/test_uds_canopen_coexistence.c \
-	$(ROOT)/middleware/canopen/core/can_acceptance_filter.c $(ROOT)/middleware/diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
+	$(ROOT)/middleware/canopen/core/can_acceptance_filter.c $(ROOT)/library/compat/legacy_diagnostics/uds_stm32/uds_stm32.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(UDS_FLAGS) $(UDS_INCLUDES) -I$(ROOT)/middleware/canopen/core $^ -o $@
 
 test-uds: $(UDS_TEST_BINS)
@@ -150,13 +150,13 @@ $(SANITIZER_BUILD_DIR)/test_can_recovery: $(ROOT)/tests/test_can_recovery.c $(RO
 $(SANITIZER_BUILD_DIR)/test_cia302_nmt_master: $(ROOT)/tests/test_cia302_nmt_master.c $(ROOT)/middleware/canopen/core/cia302_nmt_master.c $(ROOT)/middleware/canopen/core/cia302_nmt_master.h | $(SANITIZER_BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZER_FLAGS) -I$(ROOT)/middleware/canopen/core $^ -o $@
 
-$(SANITIZER_BUILD_DIR)/test_uds_adversarial: $(ROOT)/tests/uds/test_uds_adversarial.c $(UDS_CORE_SRCS) $(ROOT)/middleware/diagnostics/uds/uds_security_provider.c | $(SANITIZER_BUILD_DIR)
+$(SANITIZER_BUILD_DIR)/test_uds_adversarial: $(ROOT)/tests/uds/test_uds_adversarial.c $(UDS_CORE_SRCS) $(ROOT)/library/compat/legacy_diagnostics/uds/uds_security_provider.c | $(SANITIZER_BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZER_FLAGS) $(UDS_INCLUDES) $^ -o $@
 
 $(SANITIZER_BUILD_DIR)/test_uds_runtime: $(ROOT)/tests/uds/test_uds_runtime.c $(ROOT)/tests/fakes/canopen_reference_timing_stub.c \
 	$(ROOT)/App/Src/canopen_reference_uds.c $(UDS_CORE_SRCS) \
-	$(ROOT)/middleware/diagnostics/uds/uds_did.c $(ROOT)/middleware/diagnostics/uds/uds_security_provider.c \
-	$(ROOT)/middleware/diagnostics/uds/uds_download.c $(ROOT)/middleware/diagnostics/uds_stm32/uds_stm32.c | $(SANITIZER_BUILD_DIR)
+	$(ROOT)/library/compat/legacy_diagnostics/uds/uds_did.c $(ROOT)/library/compat/legacy_diagnostics/uds/uds_security_provider.c \
+	$(ROOT)/library/compat/legacy_diagnostics/uds/uds_download.c $(ROOT)/library/compat/legacy_diagnostics/uds_stm32/uds_stm32.c | $(SANITIZER_BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZER_FLAGS) $(UDS_FLAGS) -DCANOPEN_REFERENCE_ENABLE_UDS=1 $(UDS_INCLUDES) $^ -o $@
 
 test-sanitize: $(SANITIZER_BUILD_DIR)/test_can_recovery $(SANITIZER_BUILD_DIR)/test_cia302_nmt_master $(UDS_SANITIZER_BINS)

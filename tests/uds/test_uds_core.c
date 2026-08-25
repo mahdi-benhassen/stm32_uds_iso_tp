@@ -122,7 +122,7 @@ static void test_isotp(void) {
 
     uint8_t long_payload[20];
     for (size_t index = 0U; index < sizeof(long_payload); ++index) {
-        long_payload[index] = index;
+        long_payload[index] = (uint8_t)index;
     }
     assert(isotp_tx_start(&tx, long_payload, sizeof(long_payload), 0U, &frame) ==
            ISOTP_TX_FRAME_READY);

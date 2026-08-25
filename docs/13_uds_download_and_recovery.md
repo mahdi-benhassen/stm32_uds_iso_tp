@@ -2,7 +2,7 @@
 
 ## Design boundary
 
-The repository contains a bounded download state machine, not a complete production bootloader. `middleware/diagnostics/uds/uds_download.*` validates address ranges, alignment, transfer length, block sequence, CRC32, timeout, and activation state. Actual Flash erase, program, verification, image selection, rollback, and reset behavior are supplied through callbacks owned by the product or bootloader.
+The repository contains a bounded download state machine, not a complete production bootloader. `library/compat/legacy_diagnostics/uds/uds_download.*` validates address ranges, alignment, transfer length, block sequence, CRC32, timeout, and activation state. Actual Flash erase, program, verification, image selection, rollback, and reset behavior are supplied through callbacks owned by the product or bootloader.
 
 The UDS application-layer service path follows the general diagnostic-service model of ISO 14229-1 [1], while the multi-frame transport is bounded to classic CAN ISO-TP behavior [2]. Neither the UDS layer nor the ISO-TP layer is permitted to write Flash directly.
 

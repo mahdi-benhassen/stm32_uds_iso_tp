@@ -10,7 +10,7 @@ cmake --build build-standalone --parallel
 ctest --test-dir build-standalone --output-on-failure
 ```
 
-The release gate should additionally run `-fsanitize=address,undefined` host tests, clang-format, clang-tidy, cppcheck, and a full build with the intended embedded toolchain. The target profile must record static RAM, stack high-water mark, Flash footprint, transfer timing, and queue behavior under the selected payload bound.
+The release gate should additionally run an instrumented `gcovr` coverage build, `-fsanitize=address,undefined` host tests, clang-format, clang-tidy, cppcheck, and a full build with the intended embedded toolchain. The ISO-TP matrix covers both Classical CAN and CAN FD, CTS, bounded WAIT, immediate OVERFLOW, BS and STmin validation, reserved STmin rejection, wrong CAN ID, invalid DLC/PCI, timeout, and sequence errors. The target profile must record static RAM, stack high-water mark, Flash footprint, transfer timing, and queue behavior under the selected payload bound.
 
 | Evidence | What it proves | What it does not prove |
 |---|---|---|

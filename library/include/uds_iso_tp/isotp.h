@@ -73,6 +73,13 @@ typedef struct {
     bool active;
 } IsoTpRx;
 
+typedef enum {
+    ISOTP_TX_STATE_IDLE = 0,
+    ISOTP_TX_STATE_WAIT_FIRST_FLOW_CONTROL,
+    ISOTP_TX_STATE_SEND_CONSECUTIVE,
+    ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL
+} IsoTpTxState;
+
 typedef struct {
     IsoTpConfig config;
     uint32_t request_id;
@@ -86,8 +93,7 @@ typedef struct {
     uint8_t remote_st_min;
     uint32_t deadline_ms;
     uint32_t next_frame_ms;
-    bool active;
-    bool waiting_flow_control;
+    IsoTpTxState state;
     uint8_t wait_frames;
 } IsoTpTx;
 
@@ -115,5 +121,6 @@ IsoTpStatus isotp_tx_feed_flow_control(IsoTpTx *tx, const IsoTpCanFrame *frame, 
 IsoTpStatus isotp_tx_next(IsoTpTx *tx, uint32_t now_ms, IsoTpCanFrame *frame);
 IsoTpStatus isotp_tx_tick(IsoTpTx *tx, uint32_t now_ms);
 void isotp_tx_reset(IsoTpTx *tx);
+IsoTpTxState isotp_tx_state(const IsoTpTx *tx);
 
 #endif

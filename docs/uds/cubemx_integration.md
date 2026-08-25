@@ -1,6 +1,6 @@
 # CubeMX Integration
 
-The `stm32f767_canopen_cubemx` branch keeps CubeMX-generated infrastructure authoritative. `Core/` and `Drivers/` contain generated HAL and startup infrastructure; the UDS implementation is in project-owned `App/` and `middleware/diagnostics/` sources. The generated CAN handle is reused; the UDS layer does not call a second CAN initializer.
+The `stm32f767_canopen_cubemx` branch keeps CubeMX-generated infrastructure authoritative. `Core/` and `Drivers/` contain generated HAL and startup infrastructure; the UDS implementation is in project-owned `App/` and `library/compat/legacy_diagnostics/` sources. The generated CAN handle is reused; the UDS layer does not call a second CAN initializer.
 
 The branch-specific configuration must retain the generated CAN1 GPIO/NVIC configuration, the 1 ms CANopen timer, and the generated `stm32f7xx_hal_conf.h`. HAL CAN callback registration is enabled so the UDS adapter can attach to FIFO1 without replacing CANopenNode’s FIFO0 callback. After regeneration, confirm that the callback macro, CAN handle, FIFO notifications, filter bank split, and UDS source list remain present.
 

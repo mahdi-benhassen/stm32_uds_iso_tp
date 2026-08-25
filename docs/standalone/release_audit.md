@@ -2,7 +2,7 @@
 
 ## Scope and provenance
 
-The repository’s first commit is an exact tree snapshot of the frozen `stm32f767_canopen_cubemx` baseline from `stm32_canopen_reference`. The standalone implementation is layered on top of that snapshot and is authoritative only under `library/`, `examples/`, `tests/standalone/`, and `docs/standalone/`. The original CubeMX firmware and its CANopen application remain present for later integration work.
+The repository’s first commit is an exact tree snapshot of the frozen `stm32f767_canopen_cubemx` baseline from `stm32_canopen_reference`. The standalone implementation is layered on top of that snapshot and is authoritative only under `library/include/uds_iso_tp/` and `library/src/`, with adapter examples and tests outside the implementation boundary. The original CubeMX firmware and its CANopen application remain present for later integration work.
 
 ## Implemented gates
 
@@ -17,6 +17,7 @@ The repository’s first commit is an exact tree snapshot of the frozen `stm32f7
 | FDCAN-capable STM32 | FDCAN adapter contract carries actual data length and BRS metadata; no fake vendor project files | Compile-checked |
 | Static analysis | Strict warnings, clang-format, cppcheck, and sanitizer workflow gates | CI-configured |
 | HIL safety | Dry-run inventory, JSON/CSV/Markdown reports, destructive cases disabled by default | Script-tested |
+| Legacy cleanup | Former top-level diagnostics tree migrated under `library/compat/legacy_diagnostics/`; standalone target and CI use only `library/src` and `library/include/uds_iso_tp` | Migration verified; compatibility retirement remains |
 
 ## Evidence that is not yet present
 
@@ -30,4 +31,4 @@ The standalone repository is suitable for a **host-validated engineering baselin
 
 ## Optional integration path
 
-After the standalone repository has a green hosted CI run, the original reference can consume it as an optional dependency through a pinned subtree, submodule, or fetched source archive. The recommended first integration keeps the frozen in-tree diagnostics as a compatibility path and adds a `CANOPEN_REFERENCE_USE_STANDALONE_UDS` CMake option. Only after both paths build and pass their existing tests should the duplicated implementation be retired. This integration is intentionally not included in the standalone publication commit.
+After the standalone repository has a green hosted CI run, the original reference can consume it as an optional dependency through a pinned subtree, submodule, or fetched source archive. The inherited compatibility ABI currently lives under `library/compat/legacy_diagnostics/` so the old CubeMX application and compatibility tests remain buildable during that migration. The recommended first integration keeps the frozen in-tree diagnostics as a compatibility path and adds a `CANOPEN_REFERENCE_USE_STANDALONE_UDS` CMake option. Only after both paths build and pass their existing tests should the duplicated implementation be retired. This integration is intentionally not included in the standalone publication commit.

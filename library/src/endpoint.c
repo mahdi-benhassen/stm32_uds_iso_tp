@@ -63,7 +63,7 @@ IsoTpStatus uds_isotp_endpoint_process(UdsIsoTpEndpoint *endpoint, uint32_t now_
     IsoTpStatus status = submit_pending(endpoint);
     if (endpoint->tx_pending || (status == ISOTP_TX_FRAME_READY))
         return status;
-    if (!endpoint->tx.active)
+    if (isotp_tx_state(&endpoint->tx) == ISOTP_TX_STATE_IDLE)
         return ISOTP_OK;
     status = isotp_tx_next(&endpoint->tx, now_ms, &endpoint->pending_frame);
     if (status == ISOTP_TX_FRAME_READY)

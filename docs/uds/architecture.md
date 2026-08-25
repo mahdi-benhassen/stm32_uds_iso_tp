@@ -6,9 +6,9 @@ This repository implements a bounded UDS reference subset over classic CAN; it i
 
 | Layer | Location | Contract |
 |---|---|---|
-| CAN adapter | `middleware/diagnostics/uds_stm32/` | ISR-safe copy into fixed RX storage and bounded non-blocking TX submission. |
-| ISO-TP | `middleware/diagnostics/isotp/` | SF/FF/CF/FC, BS, STmin, sequence, timeout, and overflow handling. |
-| UDS core | `middleware/diagnostics/uds/uds.c` | Sessions, service dispatch, NRCs, response bounds, and callback ownership. |
+| CAN adapter | `library/compat/legacy_diagnostics/uds_stm32/` | ISR-safe copy into fixed RX storage and bounded non-blocking TX submission. |
+| ISO-TP | `library/compat/legacy_diagnostics/isotp/` | SF/FF/CF/FC, BS, STmin, sequence, timeout, and overflow handling. |
+| UDS core | `library/compat/legacy_diagnostics/uds/uds.c` | Sessions, service dispatch, NRCs, response bounds, and callback ownership. |
 | Policy | DID, SecurityAccess, download, and application wrapper modules | Product data, authorization, memory regions, and lifecycle callbacks. |
 
 CANopenNode remains the CANopen owner. UDS is initialized when `CANOPEN_REFERENCE_ENABLE_UDS=1`; the current CMake and configuration-header defaults set this to enabled, while products may explicitly disable it. The normal CANopen process and watchdog order remain unchanged; UDS runs in an explicit mainline budget after CANopen processing.
