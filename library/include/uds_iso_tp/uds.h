@@ -18,8 +18,6 @@
 #if (UDS_MAX_REQUEST_LENGTH > UINT16_MAX) || (UDS_MAX_RESPONSE_LENGTH > UINT16_MAX)
 #error "UDS_MAX_*_LENGTH must fit the standalone UDS uint16_t callback API"
 #endif
-_Static_assert(UDS_MAX_REQUEST_LENGTH <= UINT16_MAX, "UDS request bound exceeds uint16_t API");
-_Static_assert(UDS_MAX_RESPONSE_LENGTH <= UINT16_MAX, "UDS response bound exceeds uint16_t API");
 
 #ifndef UDS_DEFAULT_P2_SERVER_MS
 #define UDS_DEFAULT_P2_SERVER_MS 50U

@@ -78,7 +78,23 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     if (server == NULL) {
         return;
     }
-    server->callbacks = (callbacks != NULL) ? *callbacks : (UdsCallbacks){0};
+    if (callbacks != NULL) {
+        server->callbacks = *callbacks;
+    } else {
+        server->callbacks.read_did = NULL;
+        server->callbacks.write_did = NULL;
+        server->callbacks.read_dtc = NULL;
+        server->callbacks.security_seed = NULL;
+        server->callbacks.security_key = NULL;
+        server->callbacks.communication_control = NULL;
+        server->callbacks.io_control = NULL;
+        server->callbacks.routine_control = NULL;
+        server->callbacks.request_download = NULL;
+        server->callbacks.transfer_data = NULL;
+        server->callbacks.request_transfer_exit = NULL;
+        server->callbacks.ecu_reset = NULL;
+        server->callbacks.control_dtc_setting = NULL;
+    }
     server->context = context;
     server->session = UDS_SESSION_DEFAULT;
     server->security_level = 0U;

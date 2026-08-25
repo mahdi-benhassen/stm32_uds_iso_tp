@@ -13,6 +13,7 @@ on:
       - 'tests/architecture/**'
       - 'tests/conformance/**'
       - 'tests/physical/**'
+      - 'tests/portability/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -32,6 +33,7 @@ on:
       - 'tests/architecture/**'
       - 'tests/conformance/**'
       - 'tests/physical/**'
+      - 'tests/portability/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -59,6 +61,8 @@ jobs:
         run: |
           cmake -S . -B build/stm32f767 -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake -DCMAKE_BUILD_TYPE=Debug
           cmake --build build/stm32f767 --parallel
+      - name: Strict C99 freestanding portability compile
+        run: sh tests/portability/check_freestanding_arm_gcc.sh 4095 build/portability-arm-gcc
       - name: Configure
         run: cmake -S library -B build/standalone -G Ninja -DUDS_ISO_TP_BUILD_TESTS=ON -DUDS_ISO_TP_BUILD_EXAMPLES=ON -DUDS_ISO_TP_MAX_PAYLOAD=16384
       - name: Build

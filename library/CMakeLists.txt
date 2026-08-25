@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(UDS_ISO_TP_BUILD_TESTS "Build standalone host tests" ON)
 option(UDS_ISO_TP_BUILD_EXAMPLES "Build STM32 adapter contracts" ON)
+option(UDS_ISO_TP_BUILD_PORTABILITY_CHECK "Build strict C99 freestanding portability objects" ON)
 set(UDS_ISO_TP_MAX_PAYLOAD 16384 CACHE STRING "Maximum bounded ISO-TP payload")
 
 add_library(uds_iso_tp_isotp STATIC src/isotp.c)
@@ -27,6 +28,23 @@ target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
 target_compile_options(uds_iso_tp_uds PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
 target_link_libraries(uds_iso_tp_uds PUBLIC uds_iso_tp_isotp)
+
+if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
+    add_library(uds_iso_tp_c99_portability OBJECT
+        src/isotp.c
+        src/uds.c
+        src/endpoint.c
+        src/uds_did.c
+        src/uds_security_provider.c
+        src/uds_download.c)
+    target_include_directories(uds_iso_tp_c99_portability PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
+    target_compile_definitions(uds_iso_tp_c99_portability PRIVATE
+        ISOTP_MAX_PAYLOAD=${UDS_ISO_TP_MAX_PAYLOAD})
+    target_compile_options(uds_iso_tp_c99_portability PRIVATE
+        -std=c99 -ffreestanding -Wall -Wextra -Wconversion -Wsign-conversion -Werror)
+endif()
 
 if(UDS_ISO_TP_BUILD_TESTS)
     enable_testing()

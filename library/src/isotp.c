@@ -103,8 +103,9 @@ void isotp_rx_init(IsoTpRx *rx, const IsoTpConfig *config, uint32_t request_id,
                    uint32_t response_id) {
     if (rx == NULL)
         return;
-    rx->config = (config != NULL) ? *config : (IsoTpConfig){0};
-    if (config == NULL)
+    if (config != NULL)
+        rx->config = *config;
+    else
         isotp_config_default(&rx->config);
     rx->request_id = request_id;
     rx->response_id = response_id;
@@ -263,8 +264,9 @@ void isotp_tx_init(IsoTpTx *tx, const IsoTpConfig *config, uint32_t request_id,
                    uint32_t response_id) {
     if (tx == NULL)
         return;
-    tx->config = (config != NULL) ? *config : (IsoTpConfig){0};
-    if (config == NULL)
+    if (config != NULL)
+        tx->config = *config;
+    else
         isotp_config_default(&tx->config);
     tx->request_id = request_id;
     tx->response_id = response_id;

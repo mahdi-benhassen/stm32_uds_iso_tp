@@ -41,11 +41,46 @@ void uds_download_init(UdsDownload *download, const UdsDownloadMemoryMap *memory
     if (download == NULL) {
         return;
     }
-    download->memory = (memory != NULL) ? *memory : (UdsDownloadMemoryMap){0};
-    download->callbacks = (callbacks != NULL) ? *callbacks : (UdsDownloadCallbacks){0};
+    if (memory != NULL) {
+        download->memory = *memory;
+    } else {
+        download->memory.staging_image.start = 0U;
+        download->memory.staging_image.end_exclusive = 0U;
+        download->memory.bootloader.start = 0U;
+        download->memory.bootloader.end_exclusive = 0U;
+        download->memory.active_application.start = 0U;
+        download->memory.active_application.end_exclusive = 0U;
+        download->memory.persistent_storage.start = 0U;
+        download->memory.persistent_storage.end_exclusive = 0U;
+        download->memory.diagnostic_storage.start = 0U;
+        download->memory.diagnostic_storage.end_exclusive = 0U;
+        download->memory.erase_alignment = 0U;
+        download->memory.program_alignment = 0U;
+        download->memory.max_block_length = 0U;
+        download->memory.activation_supported = false;
+    }
+    if (callbacks != NULL) {
+        download->callbacks = *callbacks;
+    } else {
+        download->callbacks.erase_start = NULL;
+        download->callbacks.erase_poll = NULL;
+        download->callbacks.program = NULL;
+        download->callbacks.verify_image = NULL;
+        download->callbacks.abort = NULL;
+        download->callbacks.watchdog_kick = NULL;
+    }
     download->context = context;
     download->state = UDS_DOWNLOAD_IDLE;
-    download->metadata = (UdsDownloadMetadata){0};
+    download->metadata.magic = 0U;
+    download->metadata.image_address = 0U;
+    download->metadata.image_length = 0U;
+    download->metadata.received_length = 0U;
+    download->metadata.crc32 = 0U;
+    for (uint8_t index = 0U; index < 32U; ++index)
+        download->metadata.hash[index] = 0U;
+    download->metadata.crc_valid = false;
+    download->metadata.hash_valid = false;
+    download->metadata.activation_pending = false;
     download->expected_block = 1U;
     download->deadline_ms = 0U;
     download->crc32 = 0xFFFFFFFFUL;
