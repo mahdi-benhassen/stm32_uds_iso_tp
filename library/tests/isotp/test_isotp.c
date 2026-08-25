@@ -170,6 +170,190 @@ static void test_flow_control_profile(bool can_fd) {
     assert(isotp_tx_state(&tx) == ISOTP_TX_STATE_IDLE);
 }
 
+static void start_classic_payload(IsoTpTx *transport, IsoTpConfig *config, uint8_t *data,
+                                  uint32_t length, IsoTpCanFrame *frame) {
+    isotp_config_classic_can(config);
+    for (uint32_t index = 0U; index < length; ++index)
+        data[index] = (uint8_t)index;
+    isotp_tx_init(transport, config, 0x7E0U, 0x7E8U);
+    assert(isotp_tx_start(transport, data, length, 0U, frame) == ISOTP_TX_FRAME_READY);
+    assert((frame->data[0] >> 4U) == 1U);
+    assert(isotp_tx_state(transport) == ISOTP_TX_STATE_WAIT_FIRST_FLOW_CONTROL);
+}
+
+static void accept_classic_cts(IsoTpTx *transport, uint8_t block_size, uint8_t st_min,
+                               uint32_t now_ms) {
+    IsoTpCanFrame flow_control = fc_frame(false, 0x7E0U, ISOTP_FC_CTS, block_size, st_min);
+    assert(isotp_tx_feed_flow_control(transport, &flow_control, now_ms) == ISOTP_OK);
+}
+
+static void assert_classic_cf(IsoTpTx *transport, IsoTpCanFrame *frame, uint32_t now_ms,
+                              uint8_t sequence) {
+    assert(isotp_tx_next(transport, now_ms, frame) == ISOTP_TX_FRAME_READY);
+    assert(frame->data[0] == (uint8_t)(0x20U | sequence));
+}
+
+static void test_tx_fc_bs_zero(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[27];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 0U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_SEND_CONSECUTIVE);
+    assert(isotp_tx_next(&transport, 0U, &frame) == ISOTP_COMPLETE);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_IDLE);
+}
+
+static void test_tx_fc_bs_one(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[20];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 1U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    assert(isotp_tx_next(&transport, 0U, &frame) == ISOTP_OK);
+    accept_classic_cts(&transport, 1U, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 1U, 2U);
+    assert(isotp_tx_next(&transport, 1U, &frame) == ISOTP_COMPLETE);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_IDLE);
+}
+
+static void test_tx_fc_bs_three(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[27];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 3U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_state(&transport) != ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    assert(isotp_tx_next(&transport, 0U, &frame) == ISOTP_COMPLETE);
+}
+
+static void test_tx_fc_bs_larger_than_remaining(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[27];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 255U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_next(&transport, 0U, &frame) == ISOTP_COMPLETE);
+}
+
+static void test_tx_fc_bs_changes_between_blocks(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[48];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 3U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    accept_classic_cts(&transport, 2U, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 1U, 4U);
+    assert_classic_cf(&transport, &frame, 1U, 5U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    accept_classic_cts(&transport, 4U, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 2U, 6U);
+    assert(isotp_tx_next(&transport, 2U, &frame) == ISOTP_COMPLETE);
+}
+
+static void test_tx_fc_wait_does_not_consume_bs(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    IsoTpCanFrame wait;
+    uint8_t data[48];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 3U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    assert(transport.block_count == 0U);
+    wait = fc_frame(false, 0x7E0U, ISOTP_FC_WAIT, 0U, 0U);
+    assert(isotp_tx_feed_flow_control(&transport, &wait, 1U) == ISOTP_OK);
+    assert(isotp_tx_feed_flow_control(&transport, &wait, 2U) == ISOTP_OK);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    assert(transport.block_count == 0U);
+    accept_classic_cts(&transport, 3U, 0U, 3U);
+    assert(transport.block_count == 0U);
+    assert_classic_cf(&transport, &frame, 3U, 4U);
+    assert(transport.block_count == 1U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_SEND_CONSECUTIVE);
+}
+
+static void test_tx_fc_cts_resets_bs_counter(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[48];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 3U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert_classic_cf(&transport, &frame, 0U, 3U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    accept_classic_cts(&transport, 1U, 0U, 1U);
+    assert(transport.block_count == 0U);
+    assert(transport.remote_block_size == 1U);
+    assert_classic_cf(&transport, &frame, 1U, 4U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+}
+
+static void test_tx_bs_preserves_sequence_number(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[34];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 2U, 0U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 0U, 2U);
+    assert(isotp_tx_state(&transport) == ISOTP_TX_STATE_WAIT_BLOCK_FLOW_CONTROL);
+    accept_classic_cts(&transport, 2U, 0U, 1U);
+    assert_classic_cf(&transport, &frame, 1U, 3U);
+    assert_classic_cf(&transport, &frame, 1U, 4U);
+    assert(isotp_tx_next(&transport, 1U, &frame) == ISOTP_COMPLETE);
+}
+
+static void test_tx_bs_respects_stmin(void) {
+    IsoTpConfig config;
+    IsoTpTx transport;
+    IsoTpCanFrame frame;
+    uint8_t data[27];
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 0U, 10U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert(isotp_tx_next(&transport, 9U, &frame) == ISOTP_OK);
+    assert_classic_cf(&transport, &frame, 10U, 2U);
+    assert(isotp_tx_next(&transport, 19U, &frame) == ISOTP_OK);
+    assert_classic_cf(&transport, &frame, 20U, 3U);
+    assert(isotp_tx_next(&transport, 30U, &frame) == ISOTP_COMPLETE);
+
+    start_classic_payload(&transport, &config, data, sizeof(data), &frame);
+    accept_classic_cts(&transport, 3U, 10U, 0U);
+    assert_classic_cf(&transport, &frame, 0U, 1U);
+    assert(isotp_tx_next(&transport, 9U, &frame) == ISOTP_OK);
+    assert_classic_cf(&transport, &frame, 10U, 2U);
+    assert(isotp_tx_next(&transport, 19U, &frame) == ISOTP_OK);
+    assert_classic_cf(&transport, &frame, 20U, 3U);
+    assert(isotp_tx_next(&transport, 30U, &frame) == ISOTP_COMPLETE);
+}
+
 static void test_flow_control(void) {
     test_flow_control_profile(false);
     test_flow_control_profile(true);
@@ -211,6 +395,15 @@ int main(void) {
     test_fd_single_frames();
     test_fd_extended_first_frame();
     test_flow_control();
+    test_tx_fc_bs_zero();
+    test_tx_fc_bs_one();
+    test_tx_fc_bs_three();
+    test_tx_fc_bs_larger_than_remaining();
+    test_tx_fc_bs_changes_between_blocks();
+    test_tx_fc_wait_does_not_consume_bs();
+    test_tx_fc_cts_resets_bs_counter();
+    test_tx_bs_preserves_sequence_number();
+    test_tx_bs_respects_stmin();
     test_timeouts_and_sequence();
     return 0;
 }
