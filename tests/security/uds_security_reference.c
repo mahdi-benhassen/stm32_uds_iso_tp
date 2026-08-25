@@ -92,7 +92,7 @@ static void invalidate_seed(UdsSecurityReference *provider) {
     provider->seed_timer_active = false;
     provider->pending_level = 0U;
     if (provider->state == UDS_SECURITY_REFERENCE_STATE_WAITING_FOR_KEY) {
-        provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED;
+        provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
     }
 }
 
@@ -109,14 +109,11 @@ void uds_security_reference_init(UdsSecurityReference *provider, uint32_t determ
         (maximum_attempts == 0U) ? UDS_SECURITY_REFERENCE_DEFAULT_MAX_ATTEMPTS : maximum_attempts;
     provider->lockout_ms =
         (lockout_ms == 0U) ? UDS_SECURITY_REFERENCE_DEFAULT_LOCKOUT_MS : lockout_ms;
-    provider->initial_delay_ms = UDS_SECURITY_REFERENCE_DEFAULT_INITIAL_DELAY_MS;
     provider->seed_timeout_ms = UDS_SECURITY_REFERENCE_DEFAULT_SEED_TIMEOUT_MS;
     provider->lockout_until_ms = 0U;
-    provider->initial_delay_until_ms = provider->initial_delay_ms;
     provider->seed_expiry_ms = 0U;
     provider->deterministic_state = (deterministic_seed == 0U) ? 0x13579BDFUL : deterministic_seed;
-    provider->state = UDS_SECURITY_REFERENCE_STATE_DELAY;
-    provider->initial_delay_active = provider->initial_delay_ms != 0U;
+    provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
     provider->lockout_active = false;
     provider->seed_timer_active = false;
     provider->seed_valid = false;
@@ -132,19 +129,10 @@ void uds_security_reference_tick(UdsSecurityReference *provider, uint32_t now_ms
     if (provider == NULL) {
         return;
     }
-    if (provider->initial_delay_active &&
-        !deadline_active(now_ms, provider->initial_delay_until_ms)) {
-        provider->initial_delay_active = false;
-        if (!provider->lockout_active) {
-            provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED;
-        }
-    }
     if (provider->lockout_active && !deadline_active(now_ms, provider->lockout_until_ms)) {
         provider->lockout_active = false;
-        if (provider->failed_attempts > 0U) {
-            provider->failed_attempts--;
-        }
-        provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED;
+        provider->failed_attempts = 0U;
+        provider->state = UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
     }
     if (provider->seed_timer_active && !deadline_active(now_ms, provider->seed_expiry_ms)) {
         invalidate_seed(provider);
@@ -152,10 +140,8 @@ void uds_security_reference_tick(UdsSecurityReference *provider, uint32_t now_ms
 }
 
 bool uds_security_reference_is_locked(const UdsSecurityReference *provider, uint32_t now_ms) {
-    return (provider != NULL) &&
-           ((provider->initial_delay_active &&
-             deadline_active(now_ms, provider->initial_delay_until_ms)) ||
-            (provider->lockout_active && deadline_active(now_ms, provider->lockout_until_ms)));
+    return (provider != NULL) && provider->lockout_active &&
+           deadline_active(now_ms, provider->lockout_until_ms);
 }
 
 bool uds_security_reference_calculate_key(uint8_t level, const uint8_t *seed, uint16_t seed_length,
@@ -232,8 +218,8 @@ UdsSecurityReferenceResult uds_security_reference_verify_key(UdsSecurityReferenc
         if (provider->failed_attempts >= provider->maximum_attempts) {
             provider->lockout_active = provider->lockout_ms != 0U;
             provider->lockout_until_ms = now_ms + provider->lockout_ms;
-            provider->state = provider->lockout_active ? UDS_SECURITY_REFERENCE_STATE_DELAY
-                                                       : UDS_SECURITY_REFERENCE_STATE_LOCKED;
+            provider->state = provider->lockout_active ? UDS_SECURITY_REFERENCE_STATE_LOCKOUT
+                                                       : UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
             return UDS_SECURITY_REFERENCE_ATTEMPTS_EXCEEDED;
         }
         return UDS_SECURITY_REFERENCE_INVALID_KEY;
@@ -251,12 +237,12 @@ void uds_security_reference_session_reset(UdsSecurityReference *provider) {
     }
     provider->security_level = 0U;
     invalidate_seed(provider);
-    provider->state = provider->lockout_active ? UDS_SECURITY_REFERENCE_STATE_DELAY
-                                               : UDS_SECURITY_REFERENCE_STATE_LOCKED;
+    provider->state = provider->lockout_active ? UDS_SECURITY_REFERENCE_STATE_LOCKOUT
+                                               : UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
 }
 
 UdsSecurityReferenceState uds_security_reference_state(const UdsSecurityReference *provider) {
-    return (provider != NULL) ? provider->state : UDS_SECURITY_REFERENCE_STATE_LOCKED;
+    return (provider != NULL) ? provider->state : UDS_SECURITY_REFERENCE_STATE_LOCKED_READY;
 }
 
 uint8_t uds_security_reference_security_level(const UdsSecurityReference *provider) {

@@ -14,16 +14,18 @@
 #define UDS_SECURITY_REFERENCE_LEVEL_1 1U
 #define UDS_SECURITY_REFERENCE_LEVEL_5 5U
 #define UDS_SECURITY_REFERENCE_DEFAULT_MAX_ATTEMPTS 3U
-#define UDS_SECURITY_REFERENCE_DEFAULT_INITIAL_DELAY_MS 10000U
 #define UDS_SECURITY_REFERENCE_DEFAULT_LOCKOUT_MS 10000U
 #define UDS_SECURITY_REFERENCE_DEFAULT_SEED_TIMEOUT_MS 10000U
 
 typedef enum {
-    UDS_SECURITY_REFERENCE_STATE_LOCKED = 0,
+    UDS_SECURITY_REFERENCE_STATE_LOCKED_READY = 0,
     UDS_SECURITY_REFERENCE_STATE_WAITING_FOR_KEY,
     UDS_SECURITY_REFERENCE_STATE_UNLOCKED,
-    UDS_SECURITY_REFERENCE_STATE_DELAY
+    UDS_SECURITY_REFERENCE_STATE_LOCKOUT
 } UdsSecurityReferenceState;
+
+#define UDS_SECURITY_REFERENCE_STATE_LOCKED UDS_SECURITY_REFERENCE_STATE_LOCKED_READY
+#define UDS_SECURITY_REFERENCE_STATE_DELAY UDS_SECURITY_REFERENCE_STATE_LOCKOUT
 
 typedef enum {
     UDS_SECURITY_REFERENCE_OK = 0,
@@ -53,13 +55,10 @@ typedef struct {
     uint8_t maximum_attempts;
     uint32_t lockout_ms;
     uint32_t lockout_until_ms;
-    uint32_t initial_delay_until_ms;
     uint32_t seed_expiry_ms;
-    uint32_t initial_delay_ms;
     uint32_t seed_timeout_ms;
     uint32_t deterministic_state;
     UdsSecurityReferenceState state;
-    bool initial_delay_active;
     bool lockout_active;
     bool seed_timer_active;
     bool seed_valid;

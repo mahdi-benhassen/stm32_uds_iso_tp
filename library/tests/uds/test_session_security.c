@@ -154,7 +154,7 @@ static void test_session_control(void) {
 
     uds_server_apply_reset(&server, UDS_RESET_PROGRAMMING, 2U);
     assert(uds_server_session(&server) == UDS_SESSION_DEFAULT);
-    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
     assert(!uds_server_security_seed_valid(&server));
     assert(!uds_server_reset_pending(&server));
 
@@ -184,7 +184,7 @@ static void test_s3_and_reset(void) {
     uint8_t response[64];
     uint16_t response_length = 0U;
     configure(&server, 0U);
-    uds_server_set_timing(&server, 100U, 0U, 10000U, 1000U, 3U);
+    uds_server_set_timing(&server, 100U, 10000U, 10000U, 1000U, 3U);
     uds_server_apply_reset(&server, UDS_RESET_PROGRAMMING, 0U);
     enter_extended(&server, 0U);
     assert(uds_server_tick(&server, 99U) == UDS_RESULT_OK);
@@ -204,36 +204,64 @@ static void test_s3_and_reset(void) {
     assert(uds_server_reset_pending(&server));
     uds_server_apply_reset(&server, UDS_RESET_NORMAL, 202U);
     assert(uds_server_session(&server) == UDS_SESSION_DEFAULT);
-    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
     const uint8_t seed[] = {0x27U, UDS_SECURITY_REQUEST_SEED_LEVEL_1};
     expect_nrc(&server, 203U, seed, sizeof(seed), UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
 }
 
-static void test_security_delay_and_lockout(void) {
+static void test_security_immediate_ready_and_lockout(void) {
     UdsServer server;
     configure(&server, 0U);
-    uds_server_set_timing(&server, 60000U, 10000U, 10000U, 1000U, 3U);
     enter_extended(&server, 0U);
-    const uint8_t seed[] = {0x27U, UDS_SECURITY_REQUEST_SEED_LEVEL_1};
-    expect_nrc(&server, 9999U, seed, sizeof(seed), UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
-    expect_seed(&server, 10000U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
-    expect_key(&server, 10001U, UDS_SECURITY_SEND_KEY_LEVEL_1, false, UDS_NRC_INVALID_KEY);
-    assert(uds_server_security_failed_attempts(&server) == 1U);
-    expect_nrc(&server, 10002U, (const uint8_t[]){0x27U, UDS_SECURITY_SEND_KEY_LEVEL_1}, 2U,
-               UDS_NRC_REQUEST_SEQUENCE_ERROR);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(!server.security_lockout_active);
+    expect_seed(&server, 0U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_key(&server, 1U, UDS_SECURITY_SEND_KEY_LEVEL_1, true, 0U);
 
-    expect_seed(&server, 10003U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
-    expect_key(&server, 10004U, UDS_SECURITY_SEND_KEY_LEVEL_1, false, UDS_NRC_INVALID_KEY);
+    configure(&server, 100U);
+    enter_extended(&server, 100U);
+    const uint8_t seed[] = {0x27U, UDS_SECURITY_REQUEST_SEED_LEVEL_1};
+    expect_seed(&server, 100U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_key(&server, 101U, UDS_SECURITY_SEND_KEY_LEVEL_1, false, UDS_NRC_INVALID_KEY);
+    assert(uds_server_security_failed_attempts(&server) == 1U);
+    expect_seed(&server, 102U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_key(&server, 103U, UDS_SECURITY_SEND_KEY_LEVEL_1, false, UDS_NRC_INVALID_KEY);
     assert(uds_server_security_failed_attempts(&server) == 2U);
-    expect_seed(&server, 10005U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
-    expect_key(&server, 10006U, UDS_SECURITY_SEND_KEY_LEVEL_1, false,
+    expect_seed(&server, 104U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_key(&server, 105U, UDS_SECURITY_SEND_KEY_LEVEL_1, false,
                UDS_NRC_EXCEEDED_NUMBER_OF_ATTEMPTS);
     assert(uds_server_security_failed_attempts(&server) == 3U);
-    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_DELAY);
-    expect_nrc(&server, 10007U, seed, sizeof(seed), UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
-    assert(uds_server_tick(&server, 20006U) == UDS_RESULT_OK);
-    assert(uds_server_security_failed_attempts(&server) == 2U);
-    expect_seed(&server, 20007U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKOUT);
+    assert(server.security_lockout_until_ms == 10105U);
+    expect_nrc(&server, 105U, seed, sizeof(seed), UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+    expect_nrc(&server, 106U,
+               (const uint8_t[]){0x27U, UDS_SECURITY_SEND_KEY_LEVEL_1, 0x00U, 0x00U, 0x00U, 0x00U},
+               6U, UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+    assert(uds_server_security_failed_attempts(&server) == 3U);
+    expect_nrc(&server, 10104U, seed, sizeof(seed), UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+    assert(uds_server_tick(&server, 10104U) == UDS_RESULT_OK);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKOUT);
+    assert(uds_server_security_failed_attempts(&server) == 3U);
+    assert(uds_server_tick(&server, 10105U) == UDS_RESULT_OK);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(uds_server_security_failed_attempts(&server) == 0U);
+    expect_seed(&server, 10105U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_key(&server, 10106U, UDS_SECURITY_SEND_KEY_LEVEL_1, true, 0U);
+    assert(uds_server_security_failed_attempts(&server) == 0U);
+
+    uds_server_apply_reset(&server, UDS_RESET_NORMAL, 20000U);
+    assert(uds_server_security_state(&server) == UDS_SECURITY_STATE_LOCKED_READY);
+    assert(!server.security_lockout_active);
+    enter_extended(&server, 20000U);
+    expect_seed(&server, 20000U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+
+    configure(&server, 30000U);
+    enter_extended(&server, 30000U);
+    expect_seed(&server, 30000U, UDS_SECURITY_REQUEST_SEED_LEVEL_1);
+    expect_nrc(&server, 31000U,
+               (const uint8_t[]){0x27U, UDS_SECURITY_SEND_KEY_LEVEL_1, 0x00U, 0x00U, 0x00U, 0x00U},
+               6U, UDS_NRC_REQUEST_SEQUENCE_ERROR);
+    assert(!uds_server_security_seed_valid(&server));
 }
 
 static void test_security_success_seed_lifecycle_and_levels(void) {
@@ -365,29 +393,41 @@ static void test_security_provider_contract(void) {
     UdsSecurityReference provider;
     uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH];
     uint16_t seed_length = 0U;
+    uint8_t wrong_key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U, 0U, 0U, 0U};
     uds_security_reference_init(&provider, 0x12345678UL, 3U, 10000U);
-    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_DELAY);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_LOCKED_READY);
     assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                9999U) == UDS_SECURITY_REFERENCE_DELAY_ACTIVE);
-    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                10000U) == UDS_SECURITY_REFERENCE_OK);
+                                                0U) == UDS_SECURITY_REFERENCE_OK);
     assert(seed_length == UDS_SECURITY_REFERENCE_SEED_LENGTH);
     assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_WAITING_FOR_KEY);
-    uint8_t wrong_key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U, 0U, 0U, 0U};
-    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10001U) ==
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 1U) ==
            UDS_SECURITY_REFERENCE_INVALID_KEY);
     assert(uds_security_reference_failed_attempts(&provider) == 1U);
-    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10002U) ==
-           UDS_SECURITY_REFERENCE_SEQUENCE_ERROR);
 
     assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                10003U) == UDS_SECURITY_REFERENCE_OK);
+                                                2U) == UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 3U) ==
+           UDS_SECURITY_REFERENCE_INVALID_KEY);
+    assert(uds_security_reference_failed_attempts(&provider) == 2U);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                4U) == UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 5U) ==
+           UDS_SECURITY_REFERENCE_ATTEMPTS_EXCEEDED);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_LOCKOUT);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                10004U) == UDS_SECURITY_REFERENCE_DELAY_ACTIVE);
+    uds_security_reference_tick(&provider, 10005U);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_LOCKED_READY);
+    assert(uds_security_reference_failed_attempts(&provider) == 0U);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                10005U) == UDS_SECURITY_REFERENCE_OK);
+
     uint8_t key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U, 0U, 0U, 0U};
     uint16_t calculated_length = 0U;
     assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, seed, sizeof(seed),
                                                 key, sizeof(key), &calculated_length));
     assert(calculated_length == sizeof(key));
-    assert(uds_security_reference_verify_key(&provider, 1U, key, sizeof(key), 10004U) ==
+    assert(uds_security_reference_verify_key(&provider, 1U, key, sizeof(key), 10006U) ==
            UDS_SECURITY_REFERENCE_OK);
     assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_UNLOCKED);
     assert(uds_security_reference_security_level(&provider) == 1U);
@@ -395,22 +435,8 @@ static void test_security_provider_contract(void) {
 
     assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
                                                 20000U) == UDS_SECURITY_REFERENCE_OK);
-    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20001U) ==
-           UDS_SECURITY_REFERENCE_INVALID_KEY);
-    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                20002U) == UDS_SECURITY_REFERENCE_OK);
-    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20003U) ==
-           UDS_SECURITY_REFERENCE_INVALID_KEY);
-    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                20004U) == UDS_SECURITY_REFERENCE_OK);
-    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20005U) ==
-           UDS_SECURITY_REFERENCE_ATTEMPTS_EXCEEDED);
-    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_DELAY);
-    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                                20006U) == UDS_SECURITY_REFERENCE_DELAY_ACTIVE);
-    uds_security_reference_tick(&provider, 30005U);
-    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_LOCKED);
-    assert(uds_security_reference_failed_attempts(&provider) == 2U);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 30000U) ==
+           UDS_SECURITY_REFERENCE_SEQUENCE_ERROR);
 }
 
 static void test_malformed_security_requests(void) {
@@ -434,7 +460,7 @@ int main(void) {
     test_transition_policy();
     test_session_control();
     test_s3_and_reset();
-    test_security_delay_and_lockout();
+    test_security_immediate_ready_and_lockout();
     test_security_success_seed_lifecycle_and_levels();
     test_reference_algorithm_vectors();
     test_security_provider_contract();

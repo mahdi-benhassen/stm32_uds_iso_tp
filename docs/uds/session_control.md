@@ -33,7 +33,7 @@ The default configured values are `P2 = 50 ms` and `P2* = 5000 ms`. They are con
 
 ## Session-change side effects
 
-Every accepted session request invalidates the active security level and any pending seed, stops an active download context, and resets its transfer block counter. A request for Default from a non-default session marks a normal reset as pending because the Issue #7 screenshot associates that path with complete reset behavior. A request for Programming marks a programming reset as pending because the Issue #8 policy requires a reset path that avoids the normal initial security delay.
+Every accepted session request invalidates the active security level and any pending seed, stops an active download context, and resets its transfer block counter. A request for Default from a non-default session marks a normal reset as pending because the Issue #7 screenshot associates that path with complete reset behavior. A request for Programming marks a programming reset as pending; both reset reasons return security to the immediate `LOCKED_READY` state after the application applies the reset.
 
 The transport-independent application must not reset from the request callback. For ECUReset (`0x11`), the callback only authorizes/prepares the request; the positive response is submitted first and the application-owned executor is called after the endpoint’s TX completion boundary. The detailed metadata and reset API are documented in [service_attributes.md](service_attributes.md).
 
@@ -49,7 +49,7 @@ for a normal reset, or:
 uds_server_apply_reset(&server, UDS_RESET_PROGRAMMING, now_ms);
 ```
 
-for the programming/reprogramming reset. The API returns the logical state to Default, clears pending reset state, invalidates seeds and security level, resets download state, and establishes the correct post-reset security timing. The generic library does not call an MCU reset primitive.
+for the programming/reprogramming reset. The API returns the logical state to Default, clears pending reset state, invalidates seeds and security level, resets download state, and establishes `LOCKED_READY` with no startup SecurityAccess timer. The generic library does not call an MCU reset primitive.
 
 ## S3 server timer
 
@@ -61,7 +61,7 @@ for the programming/reprogramming reset. The API returns the logical state to De
 
 The default S3 timeout is `UDS_DEFAULT_S3_SERVER_MS` (`5000 ms`) and can be changed with `uds_server_set_timing()`. Valid diagnostic requests refresh `last_activity_ms`, including Tester Present and requests that produce a negative response. At expiration the server enters Default Session, invalidates security and seed state, stops an active download, resets the download block counter, refreshes the timer origin, and returns `UDS_RESULT_BUSY` to identify the expiration event. The endpoint remains non-blocking and does not require a sleep or `HAL_Delay()`.
 
-S3 expiration is separate from the power-on/normal-reset security delay. S3 expiration locks security and invalidates the seed, but does not restart the 10-second initial delay unless the application performs a normal ECU reset.
+S3 expiration is separate from the lockout timer. S3 expiration locks security and invalidates the seed, but does not start a SecurityAccess delay; a subsequent permitted session request can reach immediate `LOCKED_READY` behavior.
 
 ## Public API
 

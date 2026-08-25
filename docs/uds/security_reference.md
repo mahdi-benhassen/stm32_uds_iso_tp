@@ -76,7 +76,7 @@ The output includes the selected level, the normalized seed bytes, the calculate
 
 ## Manual `0x27` flow
 
-The generic server's default initial security delay is 10,000 ms. After entering Extended (`0x03`) or Programming (`0x02`) session and waiting until that delay has expired, perform the following sequence:
+After entering Extended (`0x03`) or Programming (`0x02`) session, the first RequestSeed is available immediately. Perform the following sequence:
 
 1. Send `27 01` for Level 1 or `27 09` for Level 5.
 2. Read the positive response `67 <same-subfunction> <four-seed-bytes>`.
@@ -84,7 +84,7 @@ The generic server's default initial security delay is 10,000 ms. After entering
 4. Send `27 02 <four-key-bytes>` for Level 1 or `27 0A <four-key-bytes>` for Level 5.
 5. Expect `67 02` or `67 0A` after a valid key.
 
-A key request without a matching pending seed, a key for the wrong level, or a key after seed expiry remains a generic UDS sequence error (`0x24`). A bit-flipped key is reported as invalid (`0x35`), contributes to the generic attempt counter, and can lead to `0x36` and then `0x37` lockout responses. The reference callback does not implement a second timer, session policy, or attempt counter; those responsibilities remain in `library/src/uds.c`.
+A key request without a matching pending seed, a key for the wrong level, or a key after seed expiry remains a generic UDS sequence error (`0x24`). A bit-flipped key is reported as invalid (`0x35`), contributes to the generic attempt counter, and can lead to `0x36` and then `0x37` lockout responses. After the third genuine invalid key, the server enters a separate 10-second lockout and returns `0x37` until the exact expiry boundary; it then returns to immediate-ready state with the failed-attempt counter reset. The reference callback does not implement session policy, attempt counting, or lockout timing; those responsibilities remain in `library/src/uds.c`.
 
 ## Replacing the reference provider
 

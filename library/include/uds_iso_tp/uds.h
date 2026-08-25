@@ -160,11 +160,15 @@ typedef enum {
 } UdsSessionTransitionResult;
 
 typedef enum {
-    UDS_SECURITY_STATE_LOCKED = 0,
+    UDS_SECURITY_STATE_LOCKED_READY = 0,
     UDS_SECURITY_STATE_WAITING_FOR_KEY,
     UDS_SECURITY_STATE_UNLOCKED,
-    UDS_SECURITY_STATE_DELAY
+    UDS_SECURITY_STATE_LOCKOUT
 } UdsSecurityState;
+
+/* Source-compatible aliases for applications using the pre-1.2 names. */
+#define UDS_SECURITY_STATE_LOCKED UDS_SECURITY_STATE_LOCKED_READY
+#define UDS_SECURITY_STATE_DELAY UDS_SECURITY_STATE_LOCKOUT
 
 typedef enum { UDS_RESET_NORMAL = 0, UDS_RESET_PROGRAMMING } UdsResetReason;
 
@@ -241,10 +245,11 @@ typedef struct {
     uint8_t security_failed_attempts;
     uint8_t security_max_attempts;
     uint8_t security_seed_level;
+    /* Deprecated compatibility fields; startup delay is never active or evaluated. */
     uint32_t security_initial_delay_until_ms;
+    uint32_t security_initial_delay_ms;
     uint32_t security_lockout_until_ms;
     uint32_t security_seed_expiry_ms;
-    uint32_t security_initial_delay_ms;
     uint32_t security_lockout_ms;
     uint32_t security_seed_timeout_ms;
     bool security_initial_delay_active;

@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-Issues #7 and #8 identified gaps in the previous UDS dispatcher: Session Control (`0x10`) accepted every recognized session by direct assignment, and Security Access (`0x27`) delegated every key decision to callbacks without owning request sequencing, initial delay, failed-attempt lockout, seed lifetime, or session interaction.
+Issues #7 and #8 identified gaps in the previous UDS dispatcher: Session Control (`0x10`) accepted every recognized session by direct assignment, and Security Access (`0x27`) delegated every key decision to callbacks without owning request sequencing, failed-attempt lockout, seed lifetime, or session interaction.
 
 The current implementation adds explicit, hardware-independent state machines inside the existing UDS core. Session transitions are centralized in `uds_session_transition_allowed()`. Security state is explicit in `UdsServer`, with `LOCKED`, `WAITING_FOR_KEY`, `UNLOCKED`, and `DELAY` states. Timing uses injected monotonic `uint32_t` values and wrap-safe subtraction. The implementation remains heap-free, non-blocking, bounded, and independent of STM32 HAL/CMSIS.
 
@@ -66,7 +66,7 @@ Every accepted session change invalidates the current security level and seed an
 
 ## 2. Issue #8 root cause and fix
 
-The previous Security Access handler treated every odd subfunction as RequestSeed and every even subfunction as SendKey, computed the level arithmetically, and delegated the decision to callbacks. It had no integrated seed-valid state, initial delay, maximum-attempt policy, lockout state, decrement-after-timeout behavior, session policy, or stale-seed rejection. The existing deterministic security-provider helper had a lockout mechanism but was not called by the UDS dispatcher and reset the attempt counter at the maximum, contrary to the Issue #8 diagram.
+The previous Security Access handler treated every odd subfunction as RequestSeed and every even subfunction as SendKey, computed the level arithmetically, and delegated the decision to callbacks. It had no integrated seed-valid state, maximum-attempt policy, lockout state, session policy, or stale-seed rejection. The existing deterministic security-provider helper had a separate lockout mechanism but was not aligned with the UDS dispatcher’s timing semantics.
 
 The current UDS server owns the protocol state machine and delegates only seed generation and key verification to application callbacks. This separates protocol policy from the application’s security algorithm.
 
@@ -74,18 +74,17 @@ The current UDS server owns the protocol state machine and delegates only seed g
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DELAY: startup / normal reset
-    DELAY --> LOCKED: initial delay expires
-    LOCKED --> WAITING_FOR_KEY: valid RequestSeed
+    [*] --> LOCKED_READY: power-on / reset
+    LOCKED_READY --> WAITING_FOR_KEY: valid RequestSeed
     WAITING_FOR_KEY --> UNLOCKED: valid SendKey
-    WAITING_FOR_KEY --> LOCKED: seed expires
-    WAITING_FOR_KEY --> LOCKED: invalid key, attempts < max
-    WAITING_FOR_KEY --> DELAY: invalid key reaches max
-    DELAY --> LOCKED: lockout expires / decrement attempts
-    UNLOCKED --> LOCKED: session change
-    UNLOCKED --> LOCKED: ECU reset
-    UNLOCKED --> LOCKED: S3 expiry
-    WAITING_FOR_KEY --> LOCKED: session change
+    WAITING_FOR_KEY --> LOCKED_READY: seed expires
+    WAITING_FOR_KEY --> LOCKED_READY: invalid key, attempts < max
+    WAITING_FOR_KEY --> LOCKOUT: invalid key reaches max
+    LOCKOUT --> LOCKED_READY: lockout expires
+    UNLOCKED --> LOCKED_READY: session change
+    UNLOCKED --> LOCKED_READY: ECU reset
+    UNLOCKED --> LOCKED_READY: S3 expiry
+    WAITING_FOR_KEY --> LOCKED_READY: session change
 ```
 
 ### Security-level mapping
@@ -103,25 +102,25 @@ Other Security Access subfunctions return NRC `0x12`. Default and Safety session
 
 | Condition | Response/NRC | Counter effect | State effect |
 |---|---|---|---|
-| Valid RequestSeed after delay | `67 <odd> <seed>` | None | `WAITING_FOR_KEY` |
-| RequestSeed during initial delay or lockout | NRC `0x37` | None | Remains `DELAY` |
-| SendKey without valid seed | NRC `0x24` | None | Remains `LOCKED` |
-| SendKey for another level | NRC `0x24` | None | Remains `LOCKED` |
-| Invalid key below maximum | NRC `0x35` | Increment | `LOCKED` |
-| Invalid key reaching maximum | NRC `0x36` | Remains at maximum until expiry | `DELAY` |
-| Any request during lockout | NRC `0x37` for valid RequestSeed | None | `DELAY` |
-| Lockout expiry | No response by tick | Decrement by one | `LOCKED` |
+| Valid RequestSeed in `LOCKED_READY` | `67 <odd> <seed>` | None | `WAITING_FOR_KEY` |
+| RequestSeed or SendKey during lockout | NRC `0x37` | None | Remains `LOCKOUT` |
+| SendKey without valid seed | NRC `0x24` | None | Remains `LOCKED_READY` |
+| SendKey for another level | NRC `0x24` | None | Remains `LOCKED_READY` |
+| Invalid key below maximum | NRC `0x35` | Increment | `LOCKED_READY` |
+| Invalid key reaching maximum | NRC `0x36` | Set to maximum until expiry | `LOCKOUT` |
+| Any request during lockout | NRC `0x37` | None | `LOCKOUT` |
+| Lockout expiry | No response by tick | Reset to zero | `LOCKED_READY` |
 | Valid key | `67 <even>` | Reset to zero | `UNLOCKED` |
-| Seed expiry | No response by tick | None | `LOCKED` |
+| Seed expiry | No response by tick | None | `LOCKED_READY` |
 | Callback denial other than invalid key | Mapped callback NRC | No increment | Seed remains valid unless policy says otherwise |
 
 Only `UDS_RESULT_INVALID_KEY` is counted as a failed attempt. This prevents malformed input, unsupported levels, and unrelated application denials from consuming the attempt budget.
 
 ### Timing and reset behavior
 
-The default initial security delay is `10000 ms`, the default lockout is `10000 ms`, the default seed lifetime is `10000 ms`, and the default maximum attempt count is `3`. All values can be configured with `uds_server_set_timing()`.
+SecurityAccess starts in `LOCKED_READY` with no startup timer. The default lockout is `10000 ms`, the default seed lifetime is `10000 ms`, and the default maximum attempt count is `3`. Lockout, seed expiry, and S3 values are configured with `uds_server_set_timing()`.
 
-Startup and normal reset clear the attempt counter, invalidate the seed, lock security, return to Default Session, and start the initial delay. Programming reset performs the same logical reset but skips the initial delay so reprogramming is not delayed unnecessarily. At lockout expiry, the counter decreases by one; it is not reset to zero. A successful unlock resets it to zero.
+Power-on and both normal/programming reset clear the attempt counter, invalidate the seed, return security to `LOCKED_READY`, and start no SecurityAccess timer. After three genuine invalid keys, `LOCKOUT` owns the 10000 ms timer; at expiry, the counter resets to zero and the next RequestSeed is immediately available. A successful unlock also resets it to zero.
 
 All deadline checks use monotonic unsigned arithmetic. S3 and security expiry decisions are based on expressions equivalent to:
 
@@ -142,7 +141,7 @@ No blocking delay, `HAL_Delay()`, `sleep()`, busy loop, or platform register is 
 | File | Reason |
 |---|---|
 | `library/include/uds_iso_tp/uds.h` | Adds four-session constants, explicit odd/even SecurityAccess mapping, session/security/address metadata, addressed dispatch, deferred reset state, timing defaults, and policy/reset APIs |
-| `library/src/uds.c` | Implements centralized transition policy, service metadata checks, addressing checks, initial delay, seed lifetime, failed-attempt lockout, NRC handling, wrap-safe S3 timing, and deferred reset completion |
+| `library/src/uds.c` | Implements centralized transition policy, service metadata checks, addressing checks, seed lifetime, three-attempt lockout, NRC handling, wrap-safe S3 timing, and deferred reset completion |
 | `library/include/uds_iso_tp/isotp.h` | Adds configurable frame padding, optional full-duplex mode, and event metadata while preserving independent RX/TX contexts |
 | `library/src/isotp.c` | Serializes padding at the frame boundary and applies optional full-duplex unexpected-N_PDU behavior without altering logical payload lengths |
 | `library/include/uds_iso_tp/endpoint.h` | Adds functional request ID, bounded control/response queue state, optional TX-completion callback, and deferred reset completion API |
@@ -179,7 +178,7 @@ The dedicated `uds_iso_tp_session_security_contract` suite uses a deterministic 
 | Programming path | Programming transition and programming-reset pending behavior |
 | Reset | Normal reset and programming reset return to Default and clear security state |
 | S3 | Timeout before boundary, exact boundary expiration, and Tester Present refresh |
-| Security initial delay | RequestSeed at `9999 ms` rejected and at `10000 ms` accepted |
+| SecurityAccess readiness and lockout | Immediate RequestSeed after initialization/session entry; wrong keys one/two return `0x35`; third returns `0x36`; `0x37` through 9.999 s; immediate retry at 10.000 s |
 | Request sequencing | SendKey without seed, wrong level, stale seed, expired seed |
 | Failed attempts | Invalid key one, two, and three; NRC `0x35` and `0x36` |
 | Lockout | NRC `0x37` during delay and exact 10-second expiration |
