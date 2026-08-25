@@ -1,0 +1,48 @@
+# Build and IDE output
+build/
+Debug/
+Release/
+.settings/
+*.launch
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.d
+# STM32CubeMX generated backups
+*.bak
+*.tmp
+
+# IDE metadata and local workspace files
+.vscode/
+.vscode-ctags
+.ccls-cache/
+.idea/
+*.uvoptx
+*.uvprojx
+*.ewp
+*.eww
+*.ewd
+*.scfg
+*.sct
+*.icf
+*.pdb
+
+# CMake and local coverage output
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+compile_commands.json
+Testing/
+coverage/
+*.gcda
+*.gcno
+*.gcov
+
+# Local validation dependency and Python cache
+third_party/STM32CubeF7/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/

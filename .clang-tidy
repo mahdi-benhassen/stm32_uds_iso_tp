@@ -1,0 +1,4 @@
+Checks: '-*,bugprone-*,performance-*,-bugprone-easily-swappable-parameters'
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|/)(App|middleware/canopen/core)/.*\\.(c|h)$'
+FormatStyle: none

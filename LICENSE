@@ -1,0 +1,137 @@
+STM32 CANopen Reference Research and Education License v1.0
+
+Copyright (c) 2026 Mahdi Benhassen and contributors.
+
+IMPORTANT: This is a source-available license, not an OSI-approved Open Source
+license. It permits free use only for qualifying research and education. Any
+industrial, commercial, production, or large-scale use requires a separate
+paid commercial license.
+
+1. Definitions
+
+"Licensor" means the copyright holder or other person authorized to grant
+these permissions for the project-owned material covered by this license.
+
+"Project Material" means the project-owned source code, documentation,
+configuration, build files, scripts, tests, and other material in this
+repository that is marked with SPDX identifier LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0, or is otherwise
+identified as project-owned in the repository documentation. Project Material
+does not include Third-Party Material described in Section 5.
+
+"Qualifying Research and Education Use" means use of Project Material solely
+for personal study, teaching, academic work, non-profit education, or
+non-commercial research, where the use is not part of a product or service,
+does not support an organization's ordinary business or production operations,
+and is not used to generate revenue or commercial advantage. A grant-funded or
+sponsored activity is not Qualifying Research and Education Use if the material
+is used for an industrial or commercial sponsor's product, service, or
+operations.
+
+"Commercial Use" means any use that is not Qualifying Research and Education
+Use, including industrial use, production deployment, internal business use,
+use in a product or service, use for a paying customer, or use that provides a
+commercial or competitive advantage.
+
+"Large-Scale Use" means deployment or operation involving more than ten (10)
+deployed devices, more than one hundred (100) end users, multiple operational
+sites, or a production or field deployment. Large-Scale Use requires a paid
+commercial license even when the activity is otherwise research-oriented.
+
+2. Free license for qualifying use
+
+Subject to this license, the Licensor grants you a limited, worldwide,
+non-exclusive, non-transferable, royalty-free license to use, reproduce,
+modify, compile, execute, and distribute Project Material and modifications
+of it solely for Qualifying Research and Education Use. You may share source
+code and resulting object code for that same purpose, provided that you comply
+with Section 4.
+
+3. Paid commercial license required
+
+This license grants no permission for Commercial Use or Large-Scale Use. Those
+uses require a separate written commercial license from the Licensor before
+they begin. Commercial licensing may be requested from the repository owner at
+https://github.com/mahdi-benhassen. A payment or conversation alone does not
+grant commercial rights; the written commercial agreement controls.
+
+Without that separate agreement, you must not use, reproduce, modify, compile,
+execute, distribute, sell, offer, or incorporate Project Material in an
+industrial, commercial, production, revenue-generating, or Large-Scale Use.
+
+4. Conditions for permitted distribution
+
+For permitted Qualifying Research and Education Use:
+
+(a) You must include a copy of this license with every distribution of Project
+Material or a derivative work.
+
+(b) You must retain this copyright notice, the SPDX identifier, and any other
+applicable attribution notices.
+
+(c) You must clearly mark modified files and identify material changes.
+
+(d) You must not imply endorsement by the Licensor or use the Licensor's name,
+trademarks, or project branding except to accurately describe the origin of the
+material.
+
+(e) You must not remove or bypass a technical or contractual restriction that
+separates Qualifying Research and Education Use from Commercial Use or
+Large-Scale Use.
+
+5. Third-party material
+
+This license does not replace or modify the license of any third-party
+component. Third-Party Material includes, without limitation, the
+CANopenNode/CanOpenSTM32 submodule, STM32 CMSIS and HAL files, generated vendor
+material, and any file carrying its own license or attribution notice. You must
+comply with the applicable upstream license for each such component. See
+THIRD_PARTY.md and the license files distributed with the relevant component.
+If the terms of a Third-Party Material license conflict with this license, the
+third-party license controls that material.
+
+6. Contributions and prior versions
+
+A contribution is covered by this license only if the contributor has the right
+to license it under these terms or expressly agrees to these terms. This
+license does not revoke or rewrite rights that were granted under an earlier
+license for an earlier version or contribution. Existing copies and releases
+previously distributed under another license remain governed by that earlier
+license to the extent required by law.
+
+7. No patent grant
+
+No patent license is granted by this license. Any patent rights must be
+addressed in a separate written agreement. This section does not limit rights
+that cannot lawfully be excluded.
+
+8. Disclaimer of warranty
+
+PROJECT MATERIAL IS PROVIDED "AS IS" AND WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING WARRANTIES OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY,
+OR FITNESS FOR A PARTICULAR PURPOSE. YOU ARE RESPONSIBLE FOR DETERMINING
+WHETHER IT IS SUITABLE FOR YOUR USE. THIS REFERENCE SOFTWARE IS NOT A SAFETY,
+MEDICAL, AUTOMOTIVE, OR INDUSTRIAL CERTIFICATION AND MUST NOT BE USED TO CLAIM
+CONFORMANCE WITHOUT THE REQUIRED PRODUCT-SPECIFIC VALIDATION.
+
+9. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR AND CONTRIBUTORS SHALL NOT
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+CONSEQUENTIAL, OR OTHER DAMAGES ARISING FROM THIS LICENSE OR THE USE OF PROJECT
+MATERIAL, INCLUDING LOSS OF DATA, PROFITS, PRODUCTION, OR BUSINESS INTERRUPTION,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+10. Termination
+
+Your rights under this license terminate automatically if you materially breach
+its terms. Rights for qualifying use may be restored only if the Licensor
+confirms the restoration in writing. Sections 5 through 9 survive termination.
+
+11. Entire license
+
+This license is the complete license for Project Material unless the Licensor
+grants different terms in a separate written agreement. If any provision is
+held unenforceable, it shall be modified only to the minimum extent necessary,
+and the remaining provisions shall remain in effect.
+
+SPDX-License-Identifier: LicenseRef-STM32-CANopen-Research-Education-Commercial-1.0

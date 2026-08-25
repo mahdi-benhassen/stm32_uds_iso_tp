@@ -1,0 +1,82 @@
+sub_index,field,name,access,bytes,unit,default,ctype,eds_type,note,source_row
+0x00,highestSub_indexSupported,Highest sub-index supported,ro,1,N/A,0x70,uint8_t,0x0005,Workbook row 392 says 0x29; resolved to 0x70 because defined entries reach 0x70. Vendor clarification required.,392
+0x01,ntc1,NTC1,ro,2,0.1K,2980,uint16_t,0x0006,,393
+0x02,ntc2,NTC2,ro,2,0.1k,2980,uint16_t,0x0006,,394
+0x03,ntc3,NTC3,ro,2,0.1k,2980,uint16_t,0x0006,,395
+0x04,ntc4,NTC4,ro,2,0.1k,2980,uint16_t,0x0006,,396
+0x05,ntc5,NTC5,ro,2,0.1k,2980,uint16_t,0x0006,,397
+0x06,ntc6,NTC6,ro,2,0.1k,2980,uint16_t,0x0006,,398
+0x07,ntc7,NTC7,ro,2,0.1k,2980,uint16_t,0x0006,,399
+0x08,ntc8,NTC8,ro,2,0.1k,2980,uint16_t,0x0006,,400
+0x09,ntc9,NTC9,ro,2,0.1k,2980,uint16_t,0x0006,,401
+0x0A,ntc10,NTC10,ro,2,0.1k,2980,uint16_t,0x0006,,402
+0x0B,ntc11,NTC11,ro,2,0.1k,2980,uint16_t,0x0006,,403
+0x0C,ntc12,NTC12,ro,2,0.1k,2980,uint16_t,0x0006,,404
+0x0D,ntc13,NTC13,ro,2,0.1k,2980,uint16_t,0x0006,,405
+0x0E,ntc14,NTC14,ro,2,0.1k,2980,uint16_t,0x0006,,406
+0x0F,ntc15,NTC15,ro,2,0.1k,2980,uint16_t,0x0006,,407
+0x10,ntc16,NTC16,ro,2,0.1k,2980,uint16_t,0x0006,,408
+0x11,pack_volt_adc_vaule,Pack volt ADC vaule,ro,2,N/A,0,uint16_t,0x0006,,409
+0x12,battery_volt_adc_vaule,Battery volt ADC vaule,ro,2,N/A,0,uint16_t,0x0006,,410
+0x13,buck_charge_adc_value,Buck Charge ADC value,ro,2,N/A,0,uint16_t,0x0006,,411
+0x14,reserved_for_adc_value,Reserved for ADC Value,ro,2,N/A,0,uint16_t,0x0006,,412
+0x15,reserved_for_adc_value_2,Reserved for ADC Value,ro,2,N/A,0,uint16_t,0x0006,,413
+0x16,reserved_for_adc_value_3,Reserved for ADC Value,ro,2,N/A,0,uint16_t,0x0006,,414
+0x17,reserved_for_adc_value_4,Reserved for ADC Value,ro,2,N/A,0,uint16_t,0x0006,,415
+0x18,reserved_for_adc_value_5,Reserved for ADC Value,ro,2,N/A,0,uint16_t,0x0006,,416
+0x20,atsam_sw_version,ATSAM SW Version,ro,4,N/A,0,uint32_t,0x0007,"Workbook literal 03 ""A01"" retained as a note; exact 4-byte wire encoding is not approved.",417
+0x21,bl_version,BL Version,ro,4,N/A,0,uint32_t,0x0007,"Workbook literal 03 ""A01"" retained as a note; exact 4-byte wire encoding is not approved.",418
+0x22,uid,UID,ro,4,N/A,0,uint32_t,0x0007,,419
+0x23,bq_fw_version,BQ FW version,ro,4,N/A,0,uint32_t,0x0007,"Workbook literal 03 ""A01"" retained as a note; exact 4-byte wire encoding is not approved.",420
+0x24,atsam_agency_version,ATSAM Agency version,ro,4,N/A,0,uint32_t,0x0007,"Workbook literal 03 ""A01"" retained as a note; exact 4-byte wire encoding is not approved.",421
+0x28,bq_agency_version,BQ Agency version,ro,4,N/A,0,uint32_t,0x0007,"Workbook literal 03 ""A01"" retained as a note; exact 4-byte wire encoding is not approved.",422
+0x30,charge_fault,Charge Fault,ro,2,N/A,0,uint16_t,0x0006,,423
+0x31,discharge_fault,Discharge Fault,ro,2,N/A,0,uint16_t,0x0006,,424
+0x32,charge_mode,Charge mode,ro,2,N/A,0,uint16_t,0x0006,,425
+0x33,charge_enable_control,Charge enable control,ro,2,N/A,0,uint16_t,0x0006,,426
+0x34,discharge_enable_control,Discharge enable control,ro,2,N/A,0,uint16_t,0x0006,,427
+0x35,charger_fault_flag,Charger fault flag,ro,2,N/A,0,uint16_t,0x0006,,428
+0x36,peripheral_status,Peripheral status,ro,2,N/A,0,uint16_t,0x0006,,429
+0x37,can_error_times,CAN error times,ro,2,N/A,0,uint16_t,0x0006,,430
+0x38,can_reveive_ovf_times,CAN reveive ovf times,ro,2,N/A,0,uint16_t,0x0006,,431
+0x39,pic_status_1,PIC status 1,ro,2,N/A,0,uint16_t,0x0006,,432
+0x3A,pic_status_2,PIC status 2,ro,2,N/A,0,uint16_t,0x0006,,433
+0x3B,charge_and_discharge_enable,Charge and discharge enable,ro,2,N/A,0,uint16_t,0x0006,,434
+0x3C,pic_fet_status,PIC fet status,ro,2,N/A,0,uint16_t,0x0006,,435
+0x3D,communication_succeed_rate,Communication succeed rate,ro,2,N/A,0,uint16_t,0x0006,,436
+0x3E,atsam_charge_fault_flag,ATSAM charge fault flag,ro,4,N/A,0,uint32_t,0x0007,,437
+0x3F,atsam_discharge_fault_flag,ATSAM discharge fault flag,ro,4,N/A,0,uint32_t,0x0007,,438
+0x40,atsam_discharge_alarm_flag,ATSAM discharge alarm flag,ro,1,N/A,0,uint8_t,0x0005,,439
+0x50,afe_adc_gain,AFE ADC Gain,ro,2,N/A,0,uint16_t,0x0006,,440
+0x51,afe_adc_offset,AFE ADC offset,ro,2,N/A,0,uint16_t,0x0006,,441
+0x52,cell_1_voltage,Cell 1 voltage ,ro,2,mV,0,uint16_t,0x0006,,442
+0x53,cell_2_voltage,Cell 2 voltage,ro,2,mV,0,uint16_t,0x0006,,443
+0x54,cell_3_voltage,Cell 3 voltage,ro,2,mV,0,uint16_t,0x0006,,444
+0x55,cell_4_voltage,Cell 4 voltage,ro,2,mV,0,uint16_t,0x0006,,445
+0x56,cell_5_voltage,Cell 5 voltage,ro,2,mV,0,uint16_t,0x0006,,446
+0x57,cell_6_voltage,Cell 6 voltage,ro,2,mV,0,uint16_t,0x0006,,447
+0x58,cell_7_voltage,Cell 7 voltage,ro,2,mV,0,uint16_t,0x0006,,448
+0x59,cell_8_voltage,Cell 8 voltage,ro,2,mV,0,uint16_t,0x0006,,449
+0x5A,cell_9_voltage,Cell 9 voltage,ro,2,mV,0,uint16_t,0x0006,,450
+0x5B,cell_10_voltage,Cell 10 voltage,ro,2,mV,0,uint16_t,0x0006,,451
+0x5C,cell_11_voltage,Cell 11 voltage,ro,2,mV,0,uint16_t,0x0006,,452
+0x5D,cell_12_voltage,Cell 12 voltage,ro,2,mV,0,uint16_t,0x0006,,453
+0x5E,cell_13_voltage,Cell 13 voltage,ro,2,mV,0,uint16_t,0x0006,,454
+0x5F,cell_14_voltage,Cell 14 voltage,ro,2,mV,0,uint16_t,0x0006,,455
+0x60,battery_voltage_sum_of_cell_voltage,Battery voltage (sum of cell voltage),ro,2,mV,0,uint16_t,0x0006,,456
+0x61,afe_temp1,AFE Temp1,ro,2,0.1K,0,uint16_t,0x0006,,457
+0x62,afe_temp2,AFE Temp2,ro,2,0.1K,0,uint16_t,0x0006,,458
+0x63,afe_temp3,AFE Temp3,ro,2,0.1K,0,uint16_t,0x0006,,459
+0x64,afe_current,AFE Current,ro,2,+/-0.01A,0,int16_t,0x0003,Signed INTEGER16 inferred from +/-0.01A unit; vendor confirmation required.,460
+0x65,afe_system_status,AFE System Status,ro,2,N/A,0,uint16_t,0x0006,,461
+0x66,afe_cell_balance1,AFE Cell Balance1,ro,2,N/A,0,uint16_t,0x0006,,462
+0x67,afe_cell_balance2,AFE Cell Balance2,ro,2,N/A,0,uint16_t,0x0006,,463
+0x68,afe_cell_balance3,AFE Cell Balance3,ro,2,N/A,0,uint16_t,0x0006,,464
+0x69,afe_system_control1,AFE System Control1,ro,2,N/A,0,uint16_t,0x0006,,465
+0x6A,afe_system_control2,AFE System Control2,ro,2,N/A,0,uint16_t,0x0006,,466
+0x6B,afe_communicate_succeed_rate,AFE communicate succeed rate,ro,1,%,0,uint8_t,0x0005,,467
+0x6C,rtc_time,RTC Time,rw,4,N/A,0,uint32_t,0x0007,"data format is ""03 HH MM SS""",468
+0x6D,rtc_date,RTC Date,rw,4,N/A,0,uint32_t,0x0007,"data format is ""03 YY MM DD""",469
+0x6E,rtc_communicate_succeed_rate,RTC communicate succeed rate,ro,1,%,0,uint8_t,0x0005,,470
+0x6F,eeprom_test_command,EEPROM Test Command,rw,2,N/A,0,uint16_t,0x0006,use to test EEPROM read and write,471
+0x70,disable_cell_balance,Disable Cell Balance,rw,2,N/A,0,uint16_t,0x0006,write value 0x3456 to disable cell balance for 10 minutes.,472
