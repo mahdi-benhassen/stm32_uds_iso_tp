@@ -45,7 +45,7 @@ The suite covers Classical CAN and CAN-FD framing, Flow Control CTS/WAIT/OVERFLO
 
 ## STM32F767 application
 
-The generated STM32F767 project at the repository root is now a minimal UDS-only application. It initializes bxCAN, uses request ID `0x7E0` and response ID `0x7E8`, defers received frames from the HAL callback to the main loop, and composes the authoritative endpoint. A real cross-build requires the ARM GCC toolchain and the generated STM32 HAL sources included in the project.
+The generated STM32F767 project at the repository root is now a minimal UDS-only application. It initializes bxCAN, uses request ID `0x7E0`, functional request ID `0x7DF`, and response ID `0x7E8`, defers received frames from the HAL callback to the main loop, tracks mailbox completion, and composes the authoritative endpoint. A real cross-build requires the ARM GCC toolchain and the generated STM32 HAL sources included in the project. Tag-triggered firmware packaging and the protected optional hardware-flash job are documented in [`docs/release/stm32f767_tag_release.md`](docs/release/stm32f767_tag_release.md).
 
 The reusable bindings are documented in [`examples/stm32f767_bxcan/`](examples/stm32f767_bxcan/) and [`examples/stm32_fdcan/`](examples/stm32_fdcan/). The FDCAN example deliberately remains a contract rather than an invented vendor-generated board project.
 
@@ -60,5 +60,6 @@ The reusable bindings are documented in [`examples/stm32f767_bxcan/`](examples/s
 | HIL and CAN-FD evidence | [`docs/standalone/hil.md`](docs/standalone/hil.md) |
 | Validation and release gates | [`docs/standalone/validation.md`](docs/standalone/validation.md) |
 | Release-readiness audit | [`docs/standalone/release_audit.md`](docs/standalone/release_audit.md) |
+| STM32F767 tagged firmware releases and optional flash | [`docs/release/stm32f767_tag_release.md`](docs/release/stm32f767_tag_release.md) |
 
 The project-owned material remains under its source-available research/education and commercial licensing terms. Review [`LICENSE`](LICENSE), [`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md), and [`THIRD_PARTY.md`](THIRD_PARTY.md) before redistribution. No production security, authenticated firmware activation, or physical CAN-FD HIL claim is made by the host validation alone.

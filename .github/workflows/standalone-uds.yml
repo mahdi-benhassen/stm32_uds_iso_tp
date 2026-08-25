@@ -24,6 +24,7 @@ on:
       - '.gitmodules'
       - 'FINAL_REPORT.md'
       - '.github/workflows/standalone-uds.yml'
+      - '.github/workflows/stm32f767-release.yml'
   pull_request:
     paths:
       - 'library/**'
@@ -46,6 +47,7 @@ on:
       - '.gitmodules'
       - 'FINAL_REPORT.md'
       - '.github/workflows/standalone-uds.yml'
+      - '.github/workflows/stm32f767-release.yml'
 
 permissions:
   contents: read

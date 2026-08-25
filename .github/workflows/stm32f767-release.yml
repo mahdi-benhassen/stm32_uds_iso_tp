@@ -1,0 +1,138 @@
+name: STM32F767 tagged release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stm32f767-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_NAME: stm32f767_uds_iso_tp
+
+jobs:
+  build:
+    name: Build STM32F767 release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Install embedded build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi binutils-arm-none-eabi
+
+      - name: Configure STM32F767 firmware
+        run: >-
+          cmake -S . -B build/stm32f767-release -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build STM32F767 firmware
+        run: cmake --build build/stm32f767-release --parallel
+
+      - name: Package release assets and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          build_dir="${GITHUB_WORKSPACE}/build/stm32f767-release"
+          dist="${GITHUB_WORKSPACE}/dist/stm32f767"
+          mkdir -p "${dist}"
+
+          for suffix in elf hex bin map; do
+            source="${build_dir}/${PROJECT_NAME}.${suffix}"
+            test -s "${source}"
+            cp "${source}" "${dist}/${PROJECT_NAME}-${tag}.${suffix}"
+          done
+
+          arm-none-eabi-size "${build_dir}/${PROJECT_NAME}.elf" > "${dist}/${PROJECT_NAME}-${tag}.size.txt"
+          {
+            printf 'project=%s\n' "${PROJECT_NAME}"
+            printf 'tag=%s\n' "${tag}"
+            printf 'commit=%s\n' "${GITHUB_SHA}"
+            printf 'target=STM32F767 bxCAN / Classical CAN\n'
+            printf 'flash_address=0x08000000\n'
+            printf 'security=application-owned callbacks; no production security algorithm is included\n'
+            printf 'hardware_flash=disabled unless repository variable STM32F767_TAG_FLASH_ENABLED=true and the protected environment approves\n'
+          } > "${dist}/${PROJECT_NAME}-${tag}.manifest.txt"
+          (
+            cd "${dist}"
+            sha256sum * > SHA256SUMS
+          )
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ github.ref_name }}
+          path: dist/stm32f767/
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packaged firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ github.ref_name }}
+          path: dist/stm32f767
+
+      - name: Publish tagged release and firmware assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" dist/stm32f767/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
+
+  flash-hardware:
+    name: Optional approved STM32F767 hardware flash
+    needs: build
+    if: ${{ vars.STM32F767_TAG_FLASH_ENABLED == 'true' }}
+    runs-on: [self-hosted, stm32f767, flash]
+    environment:
+      name: stm32f767-flash
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+    steps:
+      - name: Download tagged firmware artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ github.ref_name }}
+          path: dist/stm32f767
+
+      - name: Require explicit flash confirmation
+        env:
+          FLASH_CONFIRMATION: ${{ secrets.STM32F767_FLASH_CONFIRMATION }}
+          STM32_PROGRAMMER_CLI: ${{ vars.STM32_PROGRAMMER_CLI || '/usr/local/bin/STM32_Programmer_CLI' }}
+        run: |
+          set -euo pipefail
+          test "${FLASH_CONFIRMATION}" = "I_UNDERSTAND_STM32F767_FLASH"
+          test -x "${STM32_PROGRAMMER_CLI}"
+
+      - name: Verify release checksum
+        working-directory: dist/stm32f767
+        run: sha256sum --check SHA256SUMS
+
+      - name: Flash and verify STM32F767 over SWD
+        env:
+          STM32_PROGRAMMER_CLI: ${{ vars.STM32_PROGRAMMER_CLI || '/usr/local/bin/STM32_Programmer_CLI' }}
+          STM32_FLASH_ADDRESS: ${{ vars.STM32_F767_FLASH_ADDRESS || '0x08000000' }}
+        run: |
+          set -euo pipefail
+          firmware="dist/stm32f767/${PROJECT_NAME}-${GITHUB_REF_NAME}.bin"
+          "${STM32_PROGRAMMER_CLI}" -c port=SWD -w "${firmware}" "${STM32_FLASH_ADDRESS}" -v -rst
