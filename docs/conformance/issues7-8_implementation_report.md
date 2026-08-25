@@ -143,16 +143,18 @@ No blocking delay, `HAL_Delay()`, `sleep()`, busy loop, or platform register is 
 |---|---|
 | `library/include/uds_iso_tp/uds.h` | Adds four-session constants, security state enum, reset reason enum, timing defaults, explicit server state fields, policy/reset/configuration/getter APIs |
 | `library/src/uds.c` | Implements centralized transition policy, session side effects, initial delay, seed lifetime, failed-attempt lockout, NRC handling, wrap-safe S3 timing, and reset application |
-| `library/include/uds_iso_tp/uds_security_provider.h` | Adds explicit provider state, timer, and state-inspection declarations |
-| `library/src/uds_security_provider.c` | Aligns the deterministic non-production provider with initial delay, seed expiry, lockout decrement, and explicit states |
+| `tests/security/uds_security_reference.h` | Defines the explicitly non-production reference/test algorithm, key-calculation and callback APIs, and provider state declarations |
+| `tests/security/uds_security_reference.c` | Implements deterministic seed generation, bytewise test-key calculation, callback adapters, and direct-provider timing tests |
+| `tools/security_test_key.c` | Provides the dependency-free host manual calculator for displayed four-byte seeds |
 | `library/tests/uds/test_uds.c` | Adjusts the existing smoke test to pass the new initial security delay explicitly before testing the legacy callback path |
-| `library/tests/uds/test_session_security.c` | Adds deterministic unit coverage for Issues #7/#8 and the standalone provider without hardware or real sleeps |
-| `library/CMakeLists.txt` | Registers the dedicated session/security contract test in CTest |
+| `library/tests/uds/test_session_security.c` | Adds deterministic unit coverage for Issues #7/#8, reference vectors, callback integration, and the test-layer provider without hardware or real sleeps |
+| `library/CMakeLists.txt` | Keeps the generic library and portability object provider-free; registers the session/security contract and reference utility tests in CTest |
 | `docs/uds/session_control.md` | Documents Session Control policy and API |
-| `docs/uds/security_access.md` | Documents Security Access state machine and security boundary |
-| `docs/uds/README.md` | Links the new UDS policy documents |
-| `docs/standalone/validation.md` | Adds the fifth CTest suite and software-versus-HIL evidence boundary |
-| `.github/workflows/standalone-uds.yml` | Uses the stable gcovr function merge mode needed by the expanded UDS source mappings |
+| `docs/uds/security_access.md` | Documents Security Access state machine, callback boundary, and reference/test separation |
+| `docs/uds/security_reference.md` | Specifies the repository-generated test algorithm, vectors, manual flow, and production replacement requirements |
+| `docs/uds/README.md` | Links the UDS policy and reference documents |
+| `docs/standalone/validation.md` | Records the reference utility/vector test and software-versus-HIL evidence boundary |
+| `.github/workflows/standalone-uds.yml` | Uses the stable gcovr function merge mode and runs the expanded test/reference gates |
 
 No ISO-TP source was changed for Issues #7/#8. No STM32-specific code entered `library/`; the application reset callback remains outside the core.
 
@@ -185,14 +187,14 @@ The final local validation run passed:
 
 | Gate | Result |
 |---|---|
-| Architecture check | PASS; 173 tracked paths |
+| Architecture check | PASS; 180 tracked paths |
 | Validation-asset check | PASS; 13 conformance vectors and 18 physical cases |
 | Normal CMake/Ninja build | PASS |
-| Normal CTest | PASS; 5/5 suites |
-| ASan/UBSan build and CTest | PASS; 5/5 suites |
+| Normal CTest | PASS; 6/6 suites with adapter examples enabled; 5/5 core suites with examples disabled |
+| ASan/UBSan build and CTest | PASS; 5/5 core suites |
 | Strict C99 host portability build | PASS |
 | Cortex-M0+ ARM GCC freestanding compile | PASS with `ISOTP_MAX_PAYLOAD=4095` |
-| Coverage | PASS; 67% total source coverage, 86% `isotp.c`, 80% `uds.c`, 75% `uds_security_provider.c` |
+| Coverage | PASS; 63% total generic-library source coverage in the completed run; 86% `isotp.c`, 77% `uds.c`, and reference/test code measured separately |
 | clang-format | PASS |
 | clang-tidy | PASS |
 | cppcheck | PASS; standard informational too-many-configurations note only |
@@ -211,11 +213,11 @@ The default 16,384-byte payload bound is not increased. The application-owned re
 
 ## 7. Remaining limitations and issue readiness
 
-The implementation satisfies the written Issue #7/#8 software requirements and the available screenshot-specific requirements. The deterministic provider is now covered by the contract suite as well as the integrated server, with the following explicit interpretation decisions:
+The implementation satisfies the written Issue #7/#8 software requirements and the available screenshot-specific requirements. The deterministic test/reference layer is covered by direct vectors, callback tests, and the integrated server, with the following explicit interpretation decisions:
 
 1. Safety Session (`0x04`) is supported as an explicit state but undocumented transitions into or out of it are denied because the detailed screenshot does not show a Safety transition graph.
 2. Screenshot label “Unlocked (Level 2)” for `0x0A` is interpreted as the standard odd/even Level 5 pair `0x09/0x0A`; the wire subfunctions are preserved.
-3. The issue evidence does not specify a cryptographic algorithm or seed length. Those remain application callback/provider responsibilities. The repository’s deterministic provider is not a production security implementation.
+3. The issue evidence does not specify a cryptographic algorithm, seed/key width, or byte order. Those remain application callback/provider responsibilities. The repository-generated deterministic reference algorithm is test infrastructure only and is not a production security implementation; its exact formula and vectors are documented separately.
 4. A Programming Session request marks a programming reset pending; the application must perform the physical reset and call `uds_server_apply_reset(..., UDS_RESET_PROGRAMMING, ...)` to apply the no-initial-delay reset policy.
 5. The repository has not executed a physical STM32C092 or STM32F767 diagnostic campaign, so electrical interoperability, analyzer timing, interrupt latency, watchdog behavior, and board transceiver configuration remain unverified.
 

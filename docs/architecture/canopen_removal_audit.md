@@ -2,7 +2,7 @@
 
 ## Audit gate
 
-This inventory was generated before deleting CANopen files, as required by Issue #2. The baseline was the clean standalone repository tip `270f046`. The target architecture is an independent ISO 14229 UDS layer over ISO 15765-2 ISO-TP and a generic CAN/CAN-FD callback boundary; no CANopen protocol, object dictionary, or CANopenNode source is required.
+This inventory was generated before deleting CANopen files, as required by Issue #2. The baseline was the clean standalone repository tip `270f046`. The target architecture is an independent ISO 14229 UDS layer over ISO 15765-2 ISO-TP and a generic CAN/CAN-FD callback boundary; no CANopen protocol, object dictionary, or CANopenNode source is required. Paths in this historical inventory, including the former `library/src/uds_security_provider.c` and header, describe the pre-relocation baseline only; the current deterministic reference/test implementation is under `tests/security/` and is not part of the generic library.
 
 > This repository implements ISO 15765-2 ISO-TP and ISO 14229 UDS independently of CANopen. CANopen is neither required nor included.
 

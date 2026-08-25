@@ -7,7 +7,7 @@ The standalone library implements ISO 15765-2 ISO-TP and ISO 14229 UDS independe
 | Frame model | `library/include/uds_iso_tp/isotp.h` | CAN identifier, DLC, Classical/CAN-FD format, BRS flag, and bounded data bytes. |
 | ISO-TP | `library/src/isotp.c` | SF, FF, CF, FC, sequence, block size, STmin, timeout, overflow, Classical CAN and CAN-FD length formats. |
 | UDS services | `library/src/uds.c` | Service dispatch, sessions, NRCs, and product callback policy. |
-| Product policy | `uds_did.c`, `uds_security_provider.c`, `uds_download.c` | DIDs, authorization, security, memory boundaries, integrity, and lifecycle callbacks. |
+| Product policy | `uds_did.c`, `uds_download.c`, application-owned UDS callbacks | DIDs, authorization, SecurityAccess, memory boundaries, integrity, and lifecycle callbacks. The deterministic reference helper under `tests/security/` is test-only. |
 | Endpoint | `library/src/endpoint.c` | Mainline composition of ISO-TP and UDS using an injected send function and clock. |
 | Hardware binding | `examples/` | Thin STM32 bxCAN or FDCAN callback contracts. |
 

@@ -1,0 +1,44 @@
+{
+  "scope": "repository-generated test/reference only",
+  "production_use": false,
+  "seed_length_bytes": 4,
+  "key_length_bytes": 4,
+  "mask_hex": "A55AC33C",
+  "byte_order": "seed[0] and key[0] are the leftmost displayed bytes",
+  "formula": "key[i] = seed[i] XOR mask[i] for i in 0..3",
+  "levels": [1, 5],
+  "seed_generation_vectors": [
+    {
+      "initial_state_hex": "12345678",
+      "level": 1,
+      "seed_hex": "11D593FE",
+      "key_hex": "B48F50C2"
+    },
+    {
+      "initial_state_hex": "12345678",
+      "level": 5,
+      "seed_hex": "01865439",
+      "key_hex": "A4DC9705"
+    }
+  ],
+  "vectors": [
+    {
+      "level": 1,
+      "seed_hex": "00112233",
+      "key_hex": "A54BE10F",
+      "wire_pair": ["01", "02"]
+    },
+    {
+      "level": 5,
+      "seed_hex": "DEADBEEF",
+      "key_hex": "7BF77DD3",
+      "wire_pair": ["09", "0A"]
+    }
+  ],
+  "negative_cases": [
+    "unsupported level 3 is rejected",
+    "seed length other than 4 bytes is rejected",
+    "a one-bit key change is rejected",
+    "a key sent without a matching seed is a sequence error"
+  ]
+}

@@ -14,6 +14,8 @@ on:
       - 'tests/conformance/**'
       - 'tests/physical/**'
       - 'tests/portability/**'
+      - 'tests/security/**'
+      - 'tools/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -34,6 +36,8 @@ on:
       - 'tests/conformance/**'
       - 'tests/physical/**'
       - 'tests/portability/**'
+      - 'tests/security/**'
+      - 'tools/**'
       - 'docs/**'
       - 'README.md'
       - 'THIRD_PARTY.md'
@@ -82,11 +86,12 @@ jobs:
           cmake --build build/sanitize --parallel
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/sanitize --output-on-failure
       - name: Format check
-        run: clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/tests/isotp/*.c library/tests/uds/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h
+        run: clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/tests/isotp/*.c library/tests/uds/*.c tests/security/*.c tests/security/*.h tools/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h
+
       - name: Tidy and cppcheck
         run: |
           clang-tidy library/src/*.c -- -std=c11 -Ilibrary/include -Ilibrary/include/uds_iso_tp
-          cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c11 --inline-suppr --suppress=missingIncludeSystem -Ilibrary/include library/src library/tests examples
+          cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c11 --inline-suppr --suppress=missingIncludeSystem -Ilibrary/include -Itests/security library/src library/tests tests/security tools examples
       - name: HIL dry-run reports
         run: |
           python3 -m py_compile tests/standalone/run_uds_iso_tp_hil.py

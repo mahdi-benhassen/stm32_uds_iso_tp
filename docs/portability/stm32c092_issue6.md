@@ -44,7 +44,7 @@ Finished: 2 information, 0 warning and 10 error messages.
 "FDCAN_Classic_Frame_Networking\FDCAN_Classic_Frame_Networking.axf" - 10 Error(s), 0 Warning(s).
 ```
 
-The build log shows that `endpoint.c`, `isotp.c`, `uds.c`, `uds_did.c`, `uds_security_provider.c`, `uds_download.c`, `can_transport.c`, `uds_app.c`, and `uds_platform.c` all reached the link stage. Therefore, the available evidence does not support attributing the original failure to an unaccepted protocol syntax construct.
+The historical build log shows that `endpoint.c`, `isotp.c`, `uds.c`, `uds_did.c`, the former `uds_security_provider.c`, `uds_download.c`, `can_transport.c`, `uds_app.c`, and `uds_platform.c` all reached the link stage. Therefore, the available evidence does not support attributing the original failure to an unaccepted protocol syntax construct. In the current architecture, SecurityAccess remains application-owned through callbacks; the deterministic reference helper is test-only under `tests/security/`.
 
 ## 3. Root cause
 

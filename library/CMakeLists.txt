@@ -21,7 +21,6 @@ add_library(uds_iso_tp_uds STATIC
     src/uds.c
     src/endpoint.c
     src/uds_did.c
-    src/uds_security_provider.c
     src/uds_download.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -35,7 +34,6 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds.c
         src/endpoint.c
         src/uds_did.c
-        src/uds_security_provider.c
         src/uds_download.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -58,10 +56,27 @@ if(UDS_ISO_TP_BUILD_TESTS)
     target_compile_options(uds_iso_tp_uds_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_uds_contract COMMAND uds_iso_tp_uds_test)
 
-    add_executable(uds_iso_tp_session_security_test tests/uds/test_session_security.c)
+    add_executable(uds_iso_tp_session_security_test
+        tests/uds/test_session_security.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security/uds_security_reference.c)
+    target_include_directories(uds_iso_tp_session_security_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security)
     target_link_libraries(uds_iso_tp_session_security_test PRIVATE uds_iso_tp_uds)
     target_compile_options(uds_iso_tp_session_security_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_session_security_contract COMMAND uds_iso_tp_session_security_test)
+
+    add_executable(uds_iso_tp_security_test_key
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tools/security_test_key.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security/uds_security_reference.c)
+    target_include_directories(uds_iso_tp_security_test_key PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/security
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_options(uds_iso_tp_security_test_key PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_security_reference_utility
+             COMMAND uds_iso_tp_security_test_key 1 00112233)
+    set_tests_properties(uds_iso_tp_security_reference_utility PROPERTIES
+                         PASS_REGULAR_EXPRESSION "key  = A5 4B E1 0F")
 
     add_executable(uds_iso_tp_endpoint_test tests/uds/test_endpoint.c)
     target_link_libraries(uds_iso_tp_endpoint_test PRIVATE uds_iso_tp_uds)

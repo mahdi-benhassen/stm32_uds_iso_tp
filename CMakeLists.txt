@@ -21,7 +21,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/src/isotp.c
     library/src/uds.c
     library/src/uds_did.c
-    library/src/uds_security_provider.c
     library/src/uds_download.c
     library/src/endpoint.c
 )

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #include "uds_iso_tp/uds.h"
-#include "uds_iso_tp/uds_security_provider.h"
+#include "uds_security_reference.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -10,32 +10,20 @@
 #include <string.h>
 
 static bool key_callback_denied;
+static UdsSecurityReferenceCallbacks reference_callbacks;
+static uint8_t latest_seed[UDS_SECURITY_REFERENCE_SEED_LENGTH];
 
 static UdsCallbackResult security_seed(void *context, uint8_t level, uint8_t *seed,
                                        uint16_t *length, uint16_t capacity) {
-    (void)context;
-    if (((level != UDS_SECURITY_LEVEL_1) && (level != UDS_SECURITY_LEVEL_5)) || (capacity < 4U)) {
-        return UDS_RESULT_OUT_OF_RANGE;
-    }
-    seed[0] = level;
-    seed[1] = 0x12U;
-    seed[2] = 0x34U;
-    seed[3] = 0x56U;
-    *length = 4U;
-    return UDS_RESULT_OK;
+    return uds_security_reference_seed_callback(context, level, seed, length, capacity);
 }
 
 static UdsCallbackResult security_key(void *context, uint8_t level, const uint8_t *key,
                                       uint16_t length) {
-    (void)context;
     if (key_callback_denied) {
         return UDS_RESULT_DENIED;
     }
-    if ((length != 4U) || (key[0] != 0xCAU) || (key[1] != 0xFEU) || (key[2] != level) ||
-        (key[3] != 0x55U)) {
-        return UDS_RESULT_INVALID_KEY;
-    }
-    return UDS_RESULT_OK;
+    return uds_security_reference_key_callback(context, level, key, length);
 }
 
 static UdsCallbackResult ecu_reset(void *context, uint8_t subfunction) {
@@ -59,7 +47,9 @@ static UdsCallbackResult request(UdsServer *server, uint32_t now_ms, const uint8
 
 static void configure(UdsServer *server, uint32_t now_ms) {
     UdsCallbacks value = callbacks();
-    uds_server_init(server, &value, NULL, now_ms);
+    uds_security_reference_callbacks_init(&reference_callbacks, 0x12345678UL);
+    memset(latest_seed, 0, sizeof(latest_seed));
+    uds_server_init(server, &value, &reference_callbacks, now_ms);
     uds_server_set_timing(server, 100U, 10000U, 10000U, 1000U, 3U);
 }
 
@@ -87,8 +77,8 @@ static void expect_seed(UdsServer *server, uint32_t now_ms, uint8_t subfunction)
     const uint8_t data[] = {0x27U, subfunction};
     assert(request(server, now_ms, data, sizeof(data), response, &response_length) ==
            UDS_RESULT_OK);
-    assert(response_length == 6U && response[0] == 0x67U && response[1] == subfunction &&
-           response[2] == (subfunction == UDS_SECURITY_REQUEST_SEED_LEVEL_1 ? 1U : 5U));
+    assert(response_length == 6U && response[0] == 0x67U && response[1] == subfunction);
+    memcpy(latest_seed, &response[2], sizeof(latest_seed));
     assert(uds_server_security_seed_valid(server));
     assert(uds_server_security_state(server) == UDS_SECURITY_STATE_WAITING_FOR_KEY);
 }
@@ -99,9 +89,14 @@ static void expect_key(UdsServer *server, uint32_t now_ms, uint8_t subfunction, 
     uint16_t response_length = 0U;
     uint8_t level = (subfunction == UDS_SECURITY_SEND_KEY_LEVEL_1) ? UDS_SECURITY_LEVEL_1
                                                                    : UDS_SECURITY_LEVEL_5;
-    uint8_t data[] = {0x27U, subfunction, 0xCAU, 0xFEU, level, 0x55U};
+    uint8_t key[UDS_SECURITY_REFERENCE_MAX_KEY_LENGTH] = {0U};
+    uint16_t key_length = 0U;
+    assert(uds_security_reference_calculate_key(level, latest_seed, sizeof(latest_seed), key,
+                                                sizeof(key), &key_length));
+    assert(key_length == UDS_SECURITY_REFERENCE_SEED_LENGTH);
+    uint8_t data[] = {0x27U, subfunction, key[0], key[1], key[2], key[3]};
     if (!valid) {
-        data[2] = 0x00U;
+        data[2] ^= 0x01U;
     }
     UdsCallbackResult result =
         request(server, now_ms, data, sizeof(data), response, &response_length);
@@ -278,57 +273,144 @@ static void test_security_success_seed_lifecycle_and_levels(void) {
     assert(!uds_server_security_seed_valid(&server));
 }
 
-static void test_security_provider_contract(void) {
-    UdsSecurityProvider provider;
-    uint8_t seed[UDS_SECURITY_PROVIDER_SEED_LENGTH];
-    uint16_t seed_length = 0U;
-    uds_security_provider_init(&provider, 0x12345678UL, 3U, 10000U);
-    assert(uds_security_provider_state(&provider) == UDS_SECURITY_PROVIDER_STATE_DELAY);
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               9999U) == UDS_SECURITY_DELAY_ACTIVE);
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               10000U) == UDS_SECURITY_OK);
-    assert(seed_length == UDS_SECURITY_PROVIDER_SEED_LENGTH);
-    assert(uds_security_provider_state(&provider) == UDS_SECURITY_PROVIDER_STATE_WAITING_FOR_KEY);
-    uint8_t wrong_key[UDS_SECURITY_PROVIDER_SEED_LENGTH] = {0U, 0U, 0U, 0U};
-    assert(uds_security_provider_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10001U) ==
-           UDS_SECURITY_INVALID_KEY);
-    assert(uds_security_provider_failed_attempts(&provider) == 1U);
-    assert(uds_security_provider_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10002U) ==
-           UDS_SECURITY_SEQUENCE_ERROR);
-
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               10003U) == UDS_SECURITY_OK);
-    uint8_t key[UDS_SECURITY_PROVIDER_SEED_LENGTH] = {0U, 0U, 0U, 0U};
-    static const uint8_t test_mask[UDS_SECURITY_PROVIDER_SEED_LENGTH] = {0xA5U, 0x5AU, 0xC3U,
-                                                                         0x3CU};
-    for (size_t index = 0U; index < sizeof(key); ++index) {
-        key[index] = (uint8_t)(seed[index] ^ test_mask[index]);
+static void test_reference_algorithm_vectors(void) {
+    static const struct {
+        uint8_t level;
+        uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH];
+        uint8_t key[UDS_SECURITY_REFERENCE_SEED_LENGTH];
+    } vectors[] = {
+        {UDS_SECURITY_REFERENCE_LEVEL_1,
+         {0x00U, 0x11U, 0x22U, 0x33U},
+         {0xA5U, 0x4BU, 0xE1U, 0x0FU}},
+        {UDS_SECURITY_REFERENCE_LEVEL_5,
+         {0xDEU, 0xADU, 0xBEU, 0xEFU},
+         {0x7BU, 0xF7U, 0x7DU, 0xD3U}},
+    };
+    for (size_t vector_index = 0U; vector_index < (sizeof(vectors) / sizeof(vectors[0]));
+         ++vector_index) {
+        uint8_t calculated[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+        uint16_t calculated_length = 0U;
+        assert(uds_security_reference_calculate_key(vectors[vector_index].level,
+                                                    vectors[vector_index].seed,
+                                                    sizeof(vectors[vector_index].seed), calculated,
+                                                    sizeof(calculated), &calculated_length));
+        assert(calculated_length == sizeof(vectors[vector_index].key));
+        assert(memcmp(calculated, vectors[vector_index].key, sizeof(calculated)) == 0);
     }
-    assert(uds_security_provider_verify_key(&provider, 1U, key, sizeof(key), 10004U) ==
-           UDS_SECURITY_OK);
-    assert(uds_security_provider_state(&provider) == UDS_SECURITY_PROVIDER_STATE_UNLOCKED);
-    assert(uds_security_provider_security_level(&provider) == 1U);
-    assert(uds_security_provider_failed_attempts(&provider) == 0U);
 
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               20000U) == UDS_SECURITY_OK);
-    assert(uds_security_provider_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20001U) ==
-           UDS_SECURITY_INVALID_KEY);
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               20002U) == UDS_SECURITY_OK);
-    assert(uds_security_provider_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20003U) ==
-           UDS_SECURITY_INVALID_KEY);
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               20004U) == UDS_SECURITY_OK);
-    assert(uds_security_provider_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20005U) ==
-           UDS_SECURITY_ATTEMPTS_EXCEEDED);
-    assert(uds_security_provider_state(&provider) == UDS_SECURITY_PROVIDER_STATE_DELAY);
-    assert(uds_security_provider_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
-                                               20006U) == UDS_SECURITY_DELAY_ACTIVE);
-    uds_security_provider_tick(&provider, 30005U);
-    assert(uds_security_provider_state(&provider) == UDS_SECURITY_PROVIDER_STATE_LOCKED);
-    assert(uds_security_provider_failed_attempts(&provider) == 2U);
+    UdsSecurityReference provider;
+    uint8_t generated_seed[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+    uint16_t generated_length = 0U;
+    uds_security_reference_init(&provider, 0x12345678UL, 3U, 10000U);
+    assert(uds_security_reference_generate_seed(
+               &provider, UDS_SECURITY_REFERENCE_LEVEL_1, generated_seed, &generated_length,
+               sizeof(generated_seed), 10000U) == UDS_SECURITY_REFERENCE_OK);
+    assert(memcmp(generated_seed, (const uint8_t[]){0x11U, 0xD5U, 0x93U, 0xFEU},
+                  sizeof(generated_seed)) == 0);
+    assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, generated_seed,
+                                                sizeof(generated_seed), generated_seed,
+                                                sizeof(generated_seed), &generated_length));
+    assert(memcmp(generated_seed, (const uint8_t[]){0xB4U, 0x8FU, 0x50U, 0xC2U},
+                  sizeof(generated_seed)) == 0);
+
+    uds_security_reference_init(&provider, 0x12345678UL, 3U, 10000U);
+    assert(uds_security_reference_generate_seed(
+               &provider, UDS_SECURITY_REFERENCE_LEVEL_5, generated_seed, &generated_length,
+               sizeof(generated_seed), 10000U) == UDS_SECURITY_REFERENCE_OK);
+    assert(memcmp(generated_seed, (const uint8_t[]){0x01U, 0x86U, 0x54U, 0x39U},
+                  sizeof(generated_seed)) == 0);
+
+    for (uint8_t seed_number = 0U; seed_number < 32U; ++seed_number) {
+        uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH];
+        uint8_t key_a[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+        uint8_t key_b[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+        uint16_t key_a_length = 0U;
+        uint16_t key_b_length = 0U;
+        for (uint8_t index = 0U; index < UDS_SECURITY_REFERENCE_SEED_LENGTH; ++index) {
+            seed[index] = (uint8_t)(seed_number * 7U + index * 29U);
+        }
+        assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, seed,
+                                                    sizeof(seed), key_a, sizeof(key_a),
+                                                    &key_a_length));
+        assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, seed,
+                                                    sizeof(seed), key_b, sizeof(key_b),
+                                                    &key_b_length));
+        assert(key_a_length == key_b_length);
+        assert(memcmp(key_a, key_b, sizeof(key_a)) == 0);
+    }
+
+    UdsSecurityReferenceCallbacks callbacks;
+    uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+    uint8_t key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U};
+    uint16_t seed_length = 0U;
+    uds_security_reference_callbacks_init(&callbacks, 0x01020304UL);
+    assert(uds_security_reference_seed_callback(&callbacks, UDS_SECURITY_REFERENCE_LEVEL_5, seed,
+                                                &seed_length, sizeof(seed)) == UDS_RESULT_OK);
+    assert(seed_length == sizeof(seed));
+    assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_5, seed, sizeof(seed),
+                                                key, sizeof(key), &seed_length));
+    key[0] ^= 0x01U;
+    assert(uds_security_reference_key_callback(&callbacks, UDS_SECURITY_REFERENCE_LEVEL_5, key,
+                                               sizeof(key)) == UDS_RESULT_INVALID_KEY);
+    assert(uds_security_reference_key_callback(&callbacks, UDS_SECURITY_REFERENCE_LEVEL_5, key,
+                                               sizeof(key)) == UDS_RESULT_SEQUENCE_ERROR);
+
+    assert(!uds_security_reference_calculate_key(3U, seed, sizeof(seed), key, sizeof(key),
+                                                 &seed_length));
+    assert(!uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, seed, 3U, key,
+                                                 sizeof(key), &seed_length));
+}
+
+static void test_security_provider_contract(void) {
+    UdsSecurityReference provider;
+    uint8_t seed[UDS_SECURITY_REFERENCE_SEED_LENGTH];
+    uint16_t seed_length = 0U;
+    uds_security_reference_init(&provider, 0x12345678UL, 3U, 10000U);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_DELAY);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                9999U) == UDS_SECURITY_REFERENCE_DELAY_ACTIVE);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                10000U) == UDS_SECURITY_REFERENCE_OK);
+    assert(seed_length == UDS_SECURITY_REFERENCE_SEED_LENGTH);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_WAITING_FOR_KEY);
+    uint8_t wrong_key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U, 0U, 0U, 0U};
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10001U) ==
+           UDS_SECURITY_REFERENCE_INVALID_KEY);
+    assert(uds_security_reference_failed_attempts(&provider) == 1U);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 10002U) ==
+           UDS_SECURITY_REFERENCE_SEQUENCE_ERROR);
+
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                10003U) == UDS_SECURITY_REFERENCE_OK);
+    uint8_t key[UDS_SECURITY_REFERENCE_SEED_LENGTH] = {0U, 0U, 0U, 0U};
+    uint16_t calculated_length = 0U;
+    assert(uds_security_reference_calculate_key(UDS_SECURITY_REFERENCE_LEVEL_1, seed, sizeof(seed),
+                                                key, sizeof(key), &calculated_length));
+    assert(calculated_length == sizeof(key));
+    assert(uds_security_reference_verify_key(&provider, 1U, key, sizeof(key), 10004U) ==
+           UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_UNLOCKED);
+    assert(uds_security_reference_security_level(&provider) == 1U);
+    assert(uds_security_reference_failed_attempts(&provider) == 0U);
+
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                20000U) == UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20001U) ==
+           UDS_SECURITY_REFERENCE_INVALID_KEY);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                20002U) == UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20003U) ==
+           UDS_SECURITY_REFERENCE_INVALID_KEY);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                20004U) == UDS_SECURITY_REFERENCE_OK);
+    assert(uds_security_reference_verify_key(&provider, 1U, wrong_key, sizeof(wrong_key), 20005U) ==
+           UDS_SECURITY_REFERENCE_ATTEMPTS_EXCEEDED);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_DELAY);
+    assert(uds_security_reference_generate_seed(&provider, 1U, seed, &seed_length, sizeof(seed),
+                                                20006U) == UDS_SECURITY_REFERENCE_DELAY_ACTIVE);
+    uds_security_reference_tick(&provider, 30005U);
+    assert(uds_security_reference_state(&provider) == UDS_SECURITY_REFERENCE_STATE_LOCKED);
+    assert(uds_security_reference_failed_attempts(&provider) == 2U);
 }
 
 static void test_malformed_security_requests(void) {
@@ -354,6 +436,7 @@ int main(void) {
     test_s3_and_reset();
     test_security_delay_and_lockout();
     test_security_success_seed_lifecycle_and_levels();
+    test_reference_algorithm_vectors();
     test_security_provider_contract();
     test_malformed_security_requests();
     return 0;
