@@ -19,6 +19,9 @@
 #ifndef ISOTP_DEFAULT_MAX_WAIT_FRAMES
 #define ISOTP_DEFAULT_MAX_WAIT_FRAMES 3U
 #endif
+#ifndef ISOTP_DEFAULT_PADDING_VALUE
+#define ISOTP_DEFAULT_PADDING_VALUE 0xCCU
+#endif
 
 typedef struct {
     uint32_t can_id;
@@ -59,6 +62,9 @@ typedef struct {
     uint8_t rx_dl;
     bool can_fd;
     bool bit_rate_switch;
+    bool padding_enabled;
+    uint8_t padding_value;
+    bool full_duplex;
 } IsoTpConfig;
 
 typedef struct {
@@ -102,12 +108,15 @@ typedef struct {
     const uint8_t *payload;
     uint32_t length;
     bool has_flow_control;
+    bool unexpected_n_pdu;
     IsoTpCanFrame flow_control;
 } IsoTpRxEvent;
 
 void isotp_config_default(IsoTpConfig *config);
 void isotp_config_classic_can(IsoTpConfig *config);
 void isotp_config_can_fd(IsoTpConfig *config, uint8_t tx_dl, uint8_t rx_dl);
+void isotp_config_set_padding(IsoTpConfig *config, bool enabled, uint8_t value);
+void isotp_config_set_full_duplex(IsoTpConfig *config, bool enabled);
 void isotp_rx_init(IsoTpRx *rx, const IsoTpConfig *config, uint32_t request_id,
                    uint32_t response_id);
 IsoTpStatus isotp_rx_feed(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_ms,

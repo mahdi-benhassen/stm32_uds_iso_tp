@@ -163,7 +163,80 @@ static void test_isotp(void) {
     assert(isotp_rx_tick(&rx, 2000U) == ISOTP_OK);
 }
 
+static void test_service_attributes(void) {
+    uint8_t level = 0U;
+    bool is_seed = false;
+    const uint8_t request_subfunctions[] = {
+        UDS_SECURITY_REQUEST_SEED_LEVEL_1, UDS_SECURITY_REQUEST_SEED_LEVEL_2,
+        UDS_SECURITY_REQUEST_SEED_LEVEL_3, UDS_SECURITY_REQUEST_SEED_LEVEL_4,
+        UDS_SECURITY_REQUEST_SEED_LEVEL_5};
+    for (uint8_t index = 0U; index < 5U; ++index) {
+        assert(uds_security_subfunction_level(request_subfunctions[index], &level, &is_seed));
+        assert(level == (uint8_t)(index + 1U) && is_seed);
+        assert(uds_security_subfunction_level((uint8_t)(request_subfunctions[index] + 1U), &level,
+                                              &is_seed));
+        assert(level == (uint8_t)(index + 1U) && !is_seed);
+    }
+    assert(!uds_security_subfunction_level(0x0BU, &level, &is_seed));
+
+    const UdsServiceAttribute *read_attribute = uds_service_attribute(0x22U, 0U);
+    assert(read_attribute->session_mask == UDS_SESSION_MASK_ALL);
+    assert(read_attribute->address_mode == UDS_ADDRESS_MODE_BOTH);
+    assert(read_attribute->security_mask == UDS_SECURITY_MASK_NONE);
+    assert(uds_service_attribute_allows(read_attribute, UDS_SESSION_DEFAULT, 0U,
+                                        UDS_ADDRESS_PHYSICAL));
+    assert(uds_service_attribute_allows(read_attribute, UDS_SESSION_EXTENDED, 0U,
+                                        UDS_ADDRESS_FUNCTIONAL));
+
+    const UdsServiceAttribute *download_attribute = uds_service_attribute(0x34U, 0U);
+    assert(download_attribute->session_mask == UDS_SESSION_MASK_PROGRAMMING);
+    assert(download_attribute->address_mode == UDS_ADDRESS_PHYSICAL);
+    assert(!uds_service_attribute_allows(download_attribute, UDS_SESSION_EXTENDED, 0U,
+                                         UDS_ADDRESS_PHYSICAL));
+    assert(uds_service_attribute_allows(download_attribute, UDS_SESSION_PROGRAMMING, 0U,
+                                        UDS_ADDRESS_PHYSICAL));
+    assert(!uds_service_attribute_allows(download_attribute, UDS_SESSION_PROGRAMMING, 0U,
+                                         UDS_ADDRESS_FUNCTIONAL));
+
+    const UdsServiceAttribute protected_attribute = {
+        0x99U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_EXTENDED, UDS_SECURITY_MASK_LEVEL_1,
+        UDS_ADDRESS_PHYSICAL};
+    assert(!uds_service_attribute_allows(&protected_attribute, UDS_SESSION_EXTENDED, 0U,
+                                         UDS_ADDRESS_PHYSICAL));
+    assert(uds_service_attribute_allows(&protected_attribute, UDS_SESSION_EXTENDED,
+                                        UDS_SECURITY_LEVEL_1, UDS_ADDRESS_PHYSICAL));
+}
+
+static void test_addressed_dispatch(void) {
+    UdsCallbacks callbacks = {
+        .read_did = read_did, .security_seed = security_seed, .security_key = security_key};
+    UdsServer server;
+    uds_server_init(&server, &callbacks, NULL, 0U);
+    uint8_t response[64];
+    uint16_t response_len = 0U;
+    uint8_t read_request[] = {0x22U, 0xF1U, 0x90U};
+    assert(uds_server_handle_addressed(&server, read_request, sizeof(read_request), response,
+                                       &response_len, sizeof(response), UDS_ADDRESS_FUNCTIONAL,
+                                       0U) == UDS_RESULT_OK);
+    assert(response[0] == 0x62U && response[1] == 0xF1U && response[2] == 0x90U);
+
+    uint8_t security_request[] = {0x27U, UDS_SECURITY_REQUEST_SEED_LEVEL_1};
+    assert(uds_server_handle_addressed(&server, security_request, sizeof(security_request),
+                                       response, &response_len, sizeof(response),
+                                       UDS_ADDRESS_FUNCTIONAL, 1U) == UDS_RESULT_OK);
+    assert(response[0] == 0x7FU && response[1] == 0x27U &&
+           response[2] == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+
+    uint8_t reset_request[] = {0x11U, 0x01U};
+    assert(uds_server_handle_addressed(&server, reset_request, sizeof(reset_request), response,
+                                       &response_len, sizeof(response), UDS_ADDRESS_FUNCTIONAL,
+                                       2U) == UDS_RESULT_OK);
+    assert(response[0] == 0x7FU && response[1] == 0x11U &&
+           response[2] == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+}
+
 static void test_uds(void) {
+
     UdsCallbacks callbacks = {
         .read_did = read_did,
         .security_seed = security_seed,
@@ -213,6 +286,7 @@ static void test_uds(void) {
     assert(uds_server_handle(&server, reset_request, sizeof(reset_request), response, &response_len,
                              sizeof(response), 5U) == UDS_RESULT_OK);
     assert(uds_server_reset_pending(&server));
+    assert(uds_server_complete_reset(&server) == UDS_RESULT_NOT_SUPPORTED);
     uds_server_clear_reset(&server);
     assert(!uds_server_reset_pending(&server));
 
@@ -226,27 +300,34 @@ static void test_uds(void) {
                              &response_len, sizeof(response), 7U) == UDS_RESULT_OK);
     assert(response_len == 5U && response[0] == 0x71U && response[4] == 0xAAU);
 
+    uint8_t programming_request[] = {0x10U, UDS_SESSION_PROGRAMMING};
+    assert(uds_server_handle(&server, programming_request, sizeof(programming_request), response,
+                             &response_len, sizeof(response), 8U) == UDS_RESULT_OK);
+    assert(response[0] == 0x50U && response[1] == UDS_SESSION_PROGRAMMING);
+
     uint8_t download_request[] = {0x34U, 0x44U, 0x08U, 0x08U, 0x00U,
                                   0x00U, 0x00U, 0x00U, 0x10U, 0x00U};
     assert(uds_server_handle(&server, download_request, sizeof(download_request), response,
-                             &response_len, sizeof(response), 8U) == UDS_RESULT_OK);
+                             &response_len, sizeof(response), 9U) == UDS_RESULT_OK);
     assert(response[0] == 0x74U && server.download_active);
     uint8_t transfer_request[] = {0x36U, 0x01U, 0xAAU, 0xBBU};
     assert(uds_server_handle(&server, transfer_request, sizeof(transfer_request), response,
-                             &response_len, sizeof(response), 9U) == UDS_RESULT_OK);
+                             &response_len, sizeof(response), 10U) == UDS_RESULT_OK);
     assert(response[0] == 0x76U);
     uint8_t exit_request[] = {0x37U};
     assert(uds_server_handle(&server, exit_request, sizeof(exit_request), response, &response_len,
-                             sizeof(response), 10U) == UDS_RESULT_OK);
+                             sizeof(response), 11U) == UDS_RESULT_OK);
     assert(response_len == 2U && response[0] == 0x77U && response[1] == 0x55U);
 
     uint8_t unsupported[] = {0x99U};
     assert(uds_server_handle(&server, unsupported, sizeof(unsupported), response, &response_len,
-                             sizeof(response), 11U) == UDS_RESULT_OK);
+                             sizeof(response), 12U) == UDS_RESULT_OK);
     assert(response[0] == 0x7FU && response[1] == 0x99U && response[2] == 0x11U);
 }
 
 int main(void) {
+    test_service_attributes();
+    test_addressed_dispatch();
     test_isotp();
     test_uds();
     return 0;

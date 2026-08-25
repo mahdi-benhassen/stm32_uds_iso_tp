@@ -8,6 +8,7 @@
 #include <string.h>
 
 #define UDS_APP_REQUEST_ID 0x7E0U
+#define UDS_APP_FUNCTIONAL_ID 0x7DFU
 #define UDS_APP_RESPONSE_ID 0x7E8U
 
 static UdsCanTransport *s_transport;
@@ -27,6 +28,16 @@ static UdsCallbackResult uds_app_read_did(void *context, uint16_t did, uint8_t *
     return UDS_RESULT_OK;
 }
 
+static UdsCallbackResult uds_app_ecu_reset_prepare(void *context, uint8_t subfunction) {
+    (void)context;
+    return (subfunction == 0x01U) ? UDS_RESULT_OK : UDS_RESULT_OUT_OF_RANGE;
+}
+
+static void uds_app_ecu_reset_execute(void *context, uint8_t subfunction) {
+    (void)context;
+    uds_platform_system_reset(subfunction);
+}
+
 void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     if (transport == NULL)
         return;
@@ -34,11 +45,15 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
     UdsIsoTpEndpointConfig config = {0};
     isotp_config_classic_can(&config.isotp_config);
     config.send_frame = uds_can_transport_send;
+    config.tx_complete = uds_can_transport_tx_complete;
     config.clock_ms = uds_can_transport_clock;
     config.context = transport;
     config.request_id = UDS_APP_REQUEST_ID;
     config.response_id = UDS_APP_RESPONSE_ID;
+    config.functional_request_id = UDS_APP_FUNCTIONAL_ID;
     config.uds_callbacks.read_did = uds_app_read_did;
+    config.uds_callbacks.ecu_reset = uds_app_ecu_reset_prepare;
+    config.uds_callbacks.ecu_reset_execute = uds_app_ecu_reset_execute;
     config.uds_context = transport;
 
     s_transport = transport;
@@ -48,7 +63,7 @@ void uds_app_init(UdsCanTransport *transport, uint32_t now_ms) {
 
 void uds_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc) {
     if (!s_initialized || (data == NULL) || (dlc == 0U) || (dlc > 8U) ||
-        (can_id != UDS_APP_REQUEST_ID))
+        ((can_id != UDS_APP_REQUEST_ID) && (can_id != UDS_APP_FUNCTIONAL_ID)))
         return;
     if (s_rx_pending)
         return;
@@ -74,6 +89,8 @@ void uds_app_process(uint32_t now_ms) {
     }
     __enable_irq();
 
+    if (uds_can_transport_tx_complete(s_transport))
+        uds_isotp_endpoint_tx_complete(&s_endpoint);
     if (has_frame)
         (void)uds_isotp_endpoint_receive(&s_endpoint, &frame, now_ms);
     (void)uds_isotp_endpoint_process(&s_endpoint, now_ms);

@@ -48,10 +48,34 @@
 #define UDS_SESSION_EXTENDED 0x03U
 #define UDS_SESSION_SAFETY 0x04U
 
+#define UDS_SESSION_MASK_DEFAULT (1U << 0U)
+#define UDS_SESSION_MASK_PROGRAMMING (1U << 1U)
+#define UDS_SESSION_MASK_EXTENDED (1U << 2U)
+#define UDS_SESSION_MASK_SAFETY (1U << 3U)
+#define UDS_SESSION_MASK_ALL                                                                       \
+    (UDS_SESSION_MASK_DEFAULT | UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED |         \
+     UDS_SESSION_MASK_SAFETY)
+
 #define UDS_SECURITY_LEVEL_1 1U
+#define UDS_SECURITY_LEVEL_2 2U
+#define UDS_SECURITY_LEVEL_3 3U
+#define UDS_SECURITY_LEVEL_4 4U
 #define UDS_SECURITY_LEVEL_5 5U
+#define UDS_SECURITY_MASK_NONE 0U
+#define UDS_SECURITY_MASK_LEVEL_1 (1U << UDS_SECURITY_LEVEL_1)
+#define UDS_SECURITY_MASK_LEVEL_2 (1U << UDS_SECURITY_LEVEL_2)
+#define UDS_SECURITY_MASK_LEVEL_3 (1U << UDS_SECURITY_LEVEL_3)
+#define UDS_SECURITY_MASK_LEVEL_4 (1U << UDS_SECURITY_LEVEL_4)
+#define UDS_SECURITY_MASK_LEVEL_5 (1U << UDS_SECURITY_LEVEL_5)
+
 #define UDS_SECURITY_REQUEST_SEED_LEVEL_1 0x01U
 #define UDS_SECURITY_SEND_KEY_LEVEL_1 0x02U
+#define UDS_SECURITY_REQUEST_SEED_LEVEL_2 0x03U
+#define UDS_SECURITY_SEND_KEY_LEVEL_2 0x04U
+#define UDS_SECURITY_REQUEST_SEED_LEVEL_3 0x05U
+#define UDS_SECURITY_SEND_KEY_LEVEL_3 0x06U
+#define UDS_SECURITY_REQUEST_SEED_LEVEL_4 0x07U
+#define UDS_SECURITY_SEND_KEY_LEVEL_4 0x08U
 #define UDS_SECURITY_REQUEST_SEED_LEVEL_5 0x09U
 #define UDS_SECURITY_SEND_KEY_LEVEL_5 0x0AU
 
@@ -76,6 +100,19 @@
 #define UDS_NRC_WRONG_BLOCK_SEQUENCE_COUNTER 0x73U
 #define UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING 0x78U
 #define UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7FU
+
+typedef enum { UDS_ADDRESS_PHYSICAL = 1U, UDS_ADDRESS_FUNCTIONAL = 2U } UdsAddressMode;
+
+#define UDS_ADDRESS_MODE_BOTH 0U
+#define UDS_SERVICE_ANY_SUBFUNCTION 0xFFU
+
+typedef struct {
+    uint8_t sid;
+    uint8_t subservice;
+    uint8_t session_mask;
+    uint16_t security_mask;
+    uint8_t address_mode;
+} UdsServiceAttribute;
 
 #ifndef UDS_ENABLE_SESSION_CONTROL
 #define UDS_ENABLE_SESSION_CONTROL 1U
@@ -175,6 +212,7 @@ typedef UdsCallbackResult (*UdsTransferExitFn)(void *context, const uint8_t *req
                                                uint16_t request_len, uint8_t *response,
                                                uint16_t *response_len, uint16_t capacity);
 typedef UdsCallbackResult (*UdsResetFn)(void *context, uint8_t subfunction);
+typedef void (*UdsResetExecuteFn)(void *context, uint8_t subfunction);
 typedef UdsCallbackResult (*UdsDtcSettingFn)(void *context, uint8_t subfunction);
 
 typedef struct {
@@ -190,6 +228,7 @@ typedef struct {
     UdsTransferDataFn transfer_data;
     UdsTransferExitFn request_transfer_exit;
     UdsResetFn ecu_reset;
+    UdsResetExecuteFn ecu_reset_execute;
     UdsDtcSettingFn control_dtc_setting;
 } UdsCallbacks;
 
@@ -213,6 +252,7 @@ typedef struct {
     bool security_seed_timer_active;
     bool security_seed_valid;
     UdsResetReason pending_reset_reason;
+    uint8_t pending_reset_subfunction;
     uint8_t next_download_block;
     uint16_t max_download_block_length;
     uint16_t p2_server_ms;
@@ -224,8 +264,16 @@ typedef struct {
     bool dtc_setting_enabled;
 } UdsServer;
 
+bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed);
+const UdsServiceAttribute *uds_service_attribute(uint8_t sid, uint8_t subservice);
+bool uds_service_attribute_allows(const UdsServiceAttribute *attribute, uint8_t session,
+                                  uint8_t security_level, UdsAddressMode address_mode);
 void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *context,
                      uint32_t now_ms);
+UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *request,
+                                              uint16_t request_len, uint8_t *response,
+                                              uint16_t *response_len, uint16_t capacity,
+                                              UdsAddressMode address_mode, uint32_t now_ms);
 UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, uint16_t request_len,
                                     uint8_t *response, uint16_t *response_len, uint16_t capacity,
                                     uint32_t now_ms);
@@ -237,6 +285,7 @@ UdsCallbackResult uds_server_request_session(UdsServer *server, uint8_t requeste
                                              uint32_t now_ms);
 UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms);
 bool uds_server_reset_pending(const UdsServer *server);
+UdsCallbackResult uds_server_complete_reset(UdsServer *server);
 void uds_server_clear_reset(UdsServer *server);
 uint8_t uds_server_session(const UdsServer *server);
 UdsSecurityState uds_server_security_state(const UdsServer *server);

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 uint32_t uds_platform_now_ms(void);
+void uds_platform_system_reset(uint8_t reset_type);
 void uds_platform_error(void);
 
 #endif

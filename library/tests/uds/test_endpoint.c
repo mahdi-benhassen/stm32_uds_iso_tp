@@ -10,6 +10,7 @@ typedef struct {
     size_t count;
     unsigned int failures_remaining;
     uint8_t response_size;
+    unsigned int reset_calls;
 } Sink;
 
 static bool send_frame(void *context, const IsoTpCanFrame *frame) {
@@ -51,6 +52,22 @@ static IsoTpCanFrame tester_present(bool can_fd) {
     frame.data[1] = 0x3EU;
     frame.data[2] = 0x00U;
     return frame;
+}
+
+static UdsCallbackResult ecu_reset_prepare(void *context, uint8_t subfunction) {
+    (void)context;
+    return (subfunction == 1U) ? UDS_RESULT_OK : UDS_RESULT_OUT_OF_RANGE;
+}
+
+static void ecu_reset_execute(void *context, uint8_t subfunction) {
+    Sink *sink = (Sink *)context;
+    assert(subfunction == 1U);
+    ++sink->reset_calls;
+}
+
+static bool tx_complete_deferred(void *context) {
+    (void)context;
+    return false;
 }
 
 static IsoTpCanFrame flow_control(bool can_fd, uint8_t status) {
@@ -127,6 +144,153 @@ static void run_multiframe_profile(bool can_fd, uint8_t response_size) {
     assert(uds_isotp_endpoint_process(&endpoint, 1U) == ISOTP_OK);
 }
 
+static void test_deferred_reset_and_full_duplex(void) {
+    IsoTpConfig transport;
+    isotp_config_classic_can(&transport);
+    isotp_config_set_full_duplex(&transport, true);
+
+    Sink reset_sink = {0};
+    UdsCallbacks reset_callbacks = {
+        .ecu_reset = ecu_reset_prepare,
+        .ecu_reset_execute = ecu_reset_execute,
+    };
+    UdsIsoTpEndpointConfig reset_config = {
+        .send_frame = send_frame,
+        .tx_complete = tx_complete_deferred,
+        .clock_ms = clock_ms,
+        .context = &reset_sink,
+        .isotp_config = transport,
+        .request_id = 0x7E0U,
+        .response_id = 0x7E8U,
+        .uds_callbacks = reset_callbacks,
+        .uds_context = &reset_sink,
+    };
+    UdsIsoTpEndpoint reset_endpoint;
+    assert(uds_isotp_endpoint_init(&reset_endpoint, &reset_config, 0U));
+    IsoTpCanFrame reset_request = tester_present(false);
+    reset_request.dlc = 3U;
+    reset_request.data[0] = 0x02U;
+    reset_request.data[1] = 0x11U;
+    reset_request.data[2] = 0x01U;
+    assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 0U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&reset_endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    assert(reset_sink.count == 1U && reset_sink.frames[0].data[0] == 0x02U &&
+           reset_sink.frames[0].data[1] == 0x51U && reset_sink.reset_calls == 0U);
+    assert(uds_server_reset_pending(&reset_endpoint.uds));
+    uds_isotp_endpoint_tx_complete(&reset_endpoint);
+    assert(reset_sink.reset_calls == 1U);
+    assert(!uds_server_reset_pending(&reset_endpoint.uds));
+
+    reset_request.data[2] = 0x02U;
+    assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 1U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_TX_FRAME_READY);
+    assert(reset_sink.count == 2U && reset_sink.frames[1].data[0] == 0x03U &&
+           reset_sink.frames[1].data[1] == 0x7FU && reset_sink.frames[1].data[2] == 0x11U &&
+           reset_sink.frames[1].data[3] == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    assert(reset_sink.reset_calls == 1U);
+
+    reset_request.data[1] = 0x11U;
+    reset_request.data[2] = 0x81U;
+    assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 2U) == ISOTP_COMPLETE);
+    assert(!reset_endpoint.tx_pending && reset_sink.reset_calls == 2U);
+
+    Sink duplex_sink = {0};
+    duplex_sink.response_size = 16U;
+    UdsCallbacks duplex_callbacks = {.read_did = read_did};
+    UdsIsoTpEndpointConfig duplex_config = {
+        .send_frame = send_frame,
+        .clock_ms = clock_ms,
+        .context = &duplex_sink,
+        .isotp_config = transport,
+        .request_id = 0x7E0U,
+        .response_id = 0x7E8U,
+        .uds_callbacks = duplex_callbacks,
+        .uds_context = &duplex_sink,
+    };
+    UdsIsoTpEndpoint duplex_endpoint;
+    assert(uds_isotp_endpoint_init(&duplex_endpoint, &duplex_config, 0U));
+    IsoTpCanFrame outgoing_request = tester_present(false);
+    outgoing_request.dlc = 4U;
+    outgoing_request.data[0] = 0x03U;
+    outgoing_request.data[1] = 0x22U;
+    outgoing_request.data[2] = 0xF1U;
+    outgoing_request.data[3] = 0x90U;
+    assert(uds_isotp_endpoint_receive(&duplex_endpoint, &outgoing_request, 0U) ==
+           ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&duplex_endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    assert(duplex_sink.count == 1U && (duplex_sink.frames[0].data[0] >> 4U) == 1U);
+
+    IsoTpCanFrame inbound_first = {0};
+    inbound_first.can_id = 0x7E0U;
+    inbound_first.dlc = 8U;
+    inbound_first.data[0] = 0x10U;
+    inbound_first.data[1] = 10U;
+    assert(uds_isotp_endpoint_receive(&duplex_endpoint, &inbound_first, 1U) ==
+           ISOTP_NEED_FLOW_CONTROL);
+    assert(duplex_endpoint.control_pending);
+    assert(uds_isotp_endpoint_process(&duplex_endpoint, 1U) == ISOTP_TX_FRAME_READY);
+    assert(duplex_sink.count == 2U && duplex_sink.frames[1].data[0] == 0x30U);
+
+    IsoTpCanFrame outbound_fc = flow_control(false, ISOTP_FC_CTS);
+    assert(uds_isotp_endpoint_receive(&duplex_endpoint, &outbound_fc, 2U) == ISOTP_OK);
+    IsoTpCanFrame inbound_cf = {0};
+    inbound_cf.can_id = 0x7E0U;
+    inbound_cf.dlc = 5U;
+    inbound_cf.data[0] = 0x21U;
+    assert(uds_isotp_endpoint_receive(&duplex_endpoint, &inbound_cf, 2U) == ISOTP_TX_FRAME_READY);
+    assert(duplex_endpoint.queued_response_pending);
+
+    bool saw_outbound_cf = false;
+    bool saw_queued_response = false;
+    for (unsigned int iteration = 0U; iteration < 32U; ++iteration) {
+        (void)uds_isotp_endpoint_process(&duplex_endpoint, 2U);
+        if (duplex_sink.count == 0U)
+            continue;
+        const IsoTpCanFrame *emitted = &duplex_sink.frames[duplex_sink.count - 1U];
+        if ((emitted->can_id == 0x7E8U) && ((emitted->data[0] >> 4U) == 2U))
+            saw_outbound_cf = true;
+        if ((emitted->can_id == 0x7E8U) && (emitted->data[0] == 0x03U) &&
+            (emitted->data[1] == 0x7FU))
+            saw_queued_response = true;
+        if (saw_queued_response && (isotp_tx_state(&duplex_endpoint.tx) == ISOTP_TX_STATE_IDLE) &&
+            !duplex_endpoint.tx_pending)
+            break;
+    }
+    assert(saw_outbound_cf && saw_queued_response);
+}
+
+static void test_functional_endpoint_addressing(void) {
+    IsoTpConfig transport;
+    isotp_config_classic_can(&transport);
+    Sink sink = {0};
+    sink.response_size = 1U;
+    UdsCallbacks callbacks = {.read_did = read_did};
+    UdsIsoTpEndpointConfig config = {
+        .send_frame = send_frame,
+        .clock_ms = clock_ms,
+        .context = &sink,
+        .isotp_config = transport,
+        .request_id = 0x7E0U,
+        .response_id = 0x7E8U,
+        .functional_request_id = 0x7DFU,
+        .uds_callbacks = callbacks,
+        .uds_context = &sink,
+    };
+    UdsIsoTpEndpoint endpoint;
+    assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
+    IsoTpCanFrame request = tester_present(false);
+    request.can_id = 0x7DFU;
+    request.dlc = 4U;
+    request.data[0] = 0x03U;
+    request.data[1] = 0x22U;
+    request.data[2] = 0xF1U;
+    request.data[3] = 0x90U;
+    assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    assert(sink.count == 1U && sink.frames[0].can_id == 0x7E8U && sink.frames[0].dlc == 5U &&
+           sink.frames[0].data[0] == 0x04U && sink.frames[0].data[1] == 0x62U);
+}
+
 static void test_flow_control_error_and_timeout(void) {
     IsoTpConfig transport;
     isotp_config_classic_can(&transport);
@@ -166,6 +330,8 @@ static void test_flow_control_error_and_timeout(void) {
 int main(void) {
     run_multiframe_profile(false, 20U);
     run_multiframe_profile(true, 64U);
+    test_deferred_reset_and_full_duplex();
+    test_functional_endpoint_addressing();
     test_flow_control_error_and_timeout();
     return 0;
 }

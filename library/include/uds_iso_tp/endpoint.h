@@ -8,15 +8,18 @@
 #include <stdint.h>
 
 typedef bool (*UdsIsoTpSendFrameFn)(void *context, const IsoTpCanFrame *frame);
+typedef bool (*UdsIsoTpTxCompleteFn)(void *context);
 typedef uint32_t (*UdsIsoTpClockFn)(void *context);
 
 typedef struct {
     UdsIsoTpSendFrameFn send_frame;
+    UdsIsoTpTxCompleteFn tx_complete;
     UdsIsoTpClockFn clock_ms;
     void *context;
     IsoTpConfig isotp_config;
     uint32_t request_id;
     uint32_t response_id;
+    uint32_t functional_request_id;
     UdsCallbacks uds_callbacks;
     void *uds_context;
 } UdsIsoTpEndpointConfig;
@@ -29,6 +32,18 @@ typedef struct {
     uint8_t response[UDS_MAX_RESPONSE_LENGTH];
     IsoTpCanFrame pending_frame;
     bool tx_pending;
+    IsoTpCanFrame pending_control_frame;
+    bool control_pending;
+    bool pending_reset_completion;
+    bool pending_frame_final;
+    bool tx_in_flight;
+    bool in_flight_final;
+    bool in_flight_reset_completion;
+    bool tx_reset_completion;
+    uint8_t queued_response[UDS_MAX_RESPONSE_LENGTH];
+    uint16_t queued_response_length;
+    bool queued_response_pending;
+    bool queued_reset_completion;
 } UdsIsoTpEndpoint;
 
 bool uds_isotp_endpoint_init(UdsIsoTpEndpoint *endpoint, const UdsIsoTpEndpointConfig *config,
@@ -37,6 +52,7 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
                                        uint32_t now_ms);
 IsoTpStatus uds_isotp_endpoint_process(UdsIsoTpEndpoint *endpoint, uint32_t now_ms);
 IsoTpStatus uds_isotp_endpoint_tick(UdsIsoTpEndpoint *endpoint, uint32_t now_ms);
+void uds_isotp_endpoint_tx_complete(UdsIsoTpEndpoint *endpoint);
 UdsServer *uds_isotp_endpoint_server(UdsIsoTpEndpoint *endpoint);
 
 #endif

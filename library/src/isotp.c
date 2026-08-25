@@ -48,8 +48,9 @@ static void clear_frame(IsoTpCanFrame *frame, uint32_t id, const IsoTpConfig *co
     frame->is_fd = config->can_fd;
     frame->bit_rate_switch = config->can_fd && config->bit_rate_switch;
     frame->dlc = config->can_fd ? config->tx_dl : 8U;
+    uint8_t fill = config->padding_enabled ? config->padding_value : 0U;
     for (uint8_t index = 0U; index < ISOTP_MAX_FRAME_DATA; ++index) {
-        frame->data[index] = 0U;
+        frame->data[index] = fill;
     }
 }
 
@@ -73,6 +74,9 @@ void isotp_config_classic_can(IsoTpConfig *config) {
     config->rx_dl = 8U;
     config->can_fd = false;
     config->bit_rate_switch = false;
+    config->padding_enabled = false;
+    config->padding_value = ISOTP_DEFAULT_PADDING_VALUE;
+    config->full_duplex = false;
 }
 
 void isotp_config_default(IsoTpConfig *config) {
@@ -86,6 +90,19 @@ void isotp_config_can_fd(IsoTpConfig *config, uint8_t tx_dl, uint8_t rx_dl) {
     config->can_fd = true;
     config->tx_dl = valid_fd_dl(tx_dl) ? tx_dl : 64U;
     config->rx_dl = valid_fd_dl(rx_dl) ? rx_dl : 64U;
+}
+
+void isotp_config_set_padding(IsoTpConfig *config, bool enabled, uint8_t value) {
+    if (config == NULL)
+        return;
+    config->padding_enabled = enabled;
+    config->padding_value = value;
+}
+
+void isotp_config_set_full_duplex(IsoTpConfig *config, bool enabled) {
+    if (config == NULL)
+        return;
+    config->full_duplex = enabled;
 }
 
 void isotp_rx_reset(IsoTpRx *rx) {
@@ -114,7 +131,8 @@ void isotp_rx_init(IsoTpRx *rx, const IsoTpConfig *config, uint32_t request_id,
 
 static void make_fc(const IsoTpRx *rx, IsoTpRxEvent *event) {
     clear_frame(&event->flow_control, rx->response_id, &rx->config);
-    event->flow_control.dlc = rx->config.can_fd ? rx->config.tx_dl : 3U;
+    event->flow_control.dlc =
+        rx->config.can_fd ? rx->config.tx_dl : (rx->config.padding_enabled ? 8U : 3U);
     event->flow_control.data[0] = 0x30U;
     event->flow_control.data[1] = rx->config.block_size;
     event->flow_control.data[2] = rx->config.st_min;
@@ -158,9 +176,14 @@ IsoTpStatus isotp_rx_feed(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_
     event->payload = NULL;
     event->length = 0U;
     event->has_flow_control = false;
+    event->unexpected_n_pdu = false;
     if (frame->can_id != rx->request_id)
         return ISOTP_OK;
     uint8_t type = (uint8_t)(frame->data[0] >> 4U);
+    if (rx->active && rx->config.full_duplex && ((type == 0U) || (type == 1U))) {
+        event->unexpected_n_pdu = true;
+        isotp_rx_reset(rx);
+    }
     if (type == 0U) {
         uint32_t length = 0U;
         uint8_t header = 0U;
@@ -232,6 +255,8 @@ IsoTpStatus isotp_rx_feed(IsoTpRx *rx, const IsoTpCanFrame *frame, uint32_t now_
         }
         return ISOTP_OK;
     }
+    if (rx->config.full_duplex && rx->active)
+        return ISOTP_OK;
     return (type == 3U) ? ISOTP_ERR_STATE : ISOTP_ERR_FORMAT;
 }
 
@@ -289,7 +314,8 @@ IsoTpStatus isotp_tx_start(IsoTpTx *tx, const uint8_t *payload, uint32_t length,
     tx->deadline_ms = deadline(now_ms, tx->config.tx_timeout_ms);
     if (length <= 7U) {
         clear_frame(frame, tx->response_id, &tx->config);
-        frame->dlc = tx->config.can_fd ? fd_dl_for_length(length + 1U) : (uint8_t)(length + 1U);
+        frame->dlc = tx->config.can_fd ? fd_dl_for_length(length + 1U)
+                                       : (tx->config.padding_enabled ? 8U : (uint8_t)(length + 1U));
         frame->data[0] = (uint8_t)length;
         for (uint32_t index = 0U; index < length; ++index)
             frame->data[index + 1U] = payload[index];

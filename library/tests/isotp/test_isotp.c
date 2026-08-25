@@ -36,6 +36,119 @@ static void start_long_transfer(IsoTpTx *transport, const IsoTpConfig *config, b
     assert(first->is_fd == can_fd);
 }
 
+static void assert_filled(const IsoTpCanFrame *frame, uint8_t first, uint8_t last, uint8_t value) {
+    for (uint8_t index = first; index < last; ++index) {
+        assert(frame->data[index] == value);
+    }
+}
+
+static void test_padding(void) {
+    IsoTpConfig config;
+    IsoTpCanFrame frame;
+    IsoTpRxEvent event;
+    IsoTpTx padded_tx;
+    IsoTpRx padded_rx;
+    uint8_t short_payload[] = {0x22U, 0xF1U, 0x90U};
+    uint8_t transfer[10];
+
+    isotp_config_classic_can(&config);
+    isotp_config_set_padding(&config, true, 0xCCU);
+    isotp_tx_init(&padded_tx, &config, 0x7E0U, 0x7E8U);
+    isotp_rx_init(&padded_rx, &config, 0x7E8U, 0x7E0U);
+    assert(isotp_tx_start(&padded_tx, short_payload, sizeof(short_payload), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 8U && frame.data[0] == sizeof(short_payload));
+    assert_filled(&frame, 4U, 8U, 0xCCU);
+    assert(isotp_rx_feed(&padded_rx, &frame, 0U, &event) == ISOTP_COMPLETE);
+    assert(event.length == sizeof(short_payload));
+    assert(memcmp(event.payload, short_payload, sizeof(short_payload)) == 0);
+
+    uint8_t exact_sf[7] = {0U};
+    assert(isotp_tx_start(&padded_tx, exact_sf, sizeof(exact_sf), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 8U && frame.data[0] == sizeof(exact_sf));
+
+    for (uint8_t index = 0U; index < sizeof(transfer); ++index) {
+        transfer[index] = (uint8_t)(0xA0U + index);
+    }
+    assert(isotp_tx_start(&padded_tx, transfer, sizeof(transfer), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 8U && (frame.data[0] >> 4U) == 1U);
+    assert(isotp_rx_feed(&padded_rx, &frame, 0U, &event) == ISOTP_NEED_FLOW_CONTROL);
+    assert(event.has_flow_control && event.flow_control.dlc == 8U);
+    assert_filled(&event.flow_control, 3U, 8U, 0xCCU);
+    assert(isotp_tx_feed_flow_control(&padded_tx, &event.flow_control, 0U) == ISOTP_OK);
+    assert(isotp_tx_next(&padded_tx, 0U, &frame) == ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 8U && frame.data[0] == 0x21U);
+    assert_filled(&frame, 5U, 8U, 0xCCU);
+    assert(isotp_rx_feed(&padded_rx, &frame, 0U, &event) == ISOTP_COMPLETE);
+    assert(event.length == sizeof(transfer));
+    assert(memcmp(event.payload, transfer, sizeof(transfer)) == 0);
+
+    isotp_config_set_padding(&config, false, 0xCCU);
+    isotp_tx_init(&padded_tx, &config, 0x7E0U, 0x7E8U);
+    assert(isotp_tx_start(&padded_tx, short_payload, sizeof(short_payload), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 4U);
+    isotp_config_set_padding(&config, true, 0x55U);
+    isotp_tx_init(&padded_tx, &config, 0x7E0U, 0x7E8U);
+    assert(isotp_tx_start(&padded_tx, short_payload, sizeof(short_payload), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 8U);
+    assert_filled(&frame, 4U, 8U, 0x55U);
+
+    isotp_config_can_fd(&config, 64U, 64U);
+    isotp_config_set_padding(&config, true, 0xCCU);
+    isotp_tx_init(&padded_tx, &config, 0x7E0U, 0x7E8U);
+    isotp_rx_init(&padded_rx, &config, 0x7E8U, 0x7E0U);
+    uint8_t fd_payload[12] = {0U};
+    assert(isotp_tx_start(&padded_tx, fd_payload, sizeof(fd_payload), 0U, &frame) ==
+           ISOTP_TX_FRAME_READY);
+    assert(frame.dlc == 16U && frame.data[0] == 0U && frame.data[1] == sizeof(fd_payload));
+    assert_filled(&frame, 14U, 16U, 0xCCU);
+    assert(isotp_rx_feed(&padded_rx, &frame, 0U, &event) == ISOTP_COMPLETE);
+    assert(event.length == sizeof(fd_payload));
+}
+
+static void test_full_duplex_rx_restart(void) {
+    IsoTpConfig config;
+    IsoTpRx rx;
+    IsoTpRxEvent event;
+    IsoTpCanFrame frame = {0};
+    uint8_t first_payload[6] = {0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U};
+
+    isotp_config_classic_can(&config);
+    isotp_config_set_full_duplex(&config, true);
+    isotp_rx_init(&rx, &config, 0x7E8U, 0x7E0U);
+    frame.can_id = 0x7E8U;
+    frame.dlc = 8U;
+    frame.data[0] = 0x10U;
+    frame.data[1] = 10U;
+    memcpy(&frame.data[2], first_payload, sizeof(first_payload));
+    assert(isotp_rx_feed(&rx, &frame, 0U, &event) == ISOTP_NEED_FLOW_CONTROL);
+    assert(rx.active);
+
+    memset(&frame, 0, sizeof(frame));
+    frame.can_id = 0x7E8U;
+    frame.dlc = 3U;
+    frame.data[0] = 0x30U;
+    assert(isotp_rx_feed(&rx, &frame, 1U, &event) == ISOTP_OK);
+    assert(rx.active);
+    frame.dlc = 1U;
+    frame.data[0] = 0x40U;
+    assert(isotp_rx_feed(&rx, &frame, 1U, &event) == ISOTP_OK);
+    assert(rx.active);
+
+    memset(&frame, 0, sizeof(frame));
+    frame.can_id = 0x7E8U;
+    frame.dlc = 2U;
+    frame.data[0] = 0x01U;
+    frame.data[1] = 0xAAU;
+    assert(isotp_rx_feed(&rx, &frame, 1U, &event) == ISOTP_COMPLETE);
+    assert(event.unexpected_n_pdu && event.length == 1U && event.payload[0] == 0xAAU);
+    assert(!rx.active);
+}
+
 static void test_classic(void) {
     IsoTpConfig config;
     IsoTpCanFrame frame;
@@ -391,6 +504,8 @@ static void test_timeouts_and_sequence(void) {
 }
 
 int main(void) {
+    test_padding();
+    test_full_duplex_rx_restart();
     test_classic();
     test_fd_single_frames();
     test_fd_extended_first_frame();

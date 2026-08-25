@@ -18,7 +18,85 @@ static bool security_session_allowed(uint8_t session) {
     return (session == UDS_SESSION_PROGRAMMING) || (session == UDS_SESSION_EXTENDED);
 }
 
-static bool security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed) {
+static uint8_t session_mask(uint8_t session) {
+    switch (session) {
+    case UDS_SESSION_DEFAULT:
+        return UDS_SESSION_MASK_DEFAULT;
+    case UDS_SESSION_PROGRAMMING:
+        return UDS_SESSION_MASK_PROGRAMMING;
+    case UDS_SESSION_EXTENDED:
+        return UDS_SESSION_MASK_EXTENDED;
+    case UDS_SESSION_SAFETY:
+        return UDS_SESSION_MASK_SAFETY;
+    default:
+        return 0U;
+    }
+}
+
+static const UdsServiceAttribute default_service_attribute = {
+    0U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+    UDS_ADDRESS_MODE_BOTH};
+
+static const UdsServiceAttribute service_attributes[] = {
+    {0x10U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_MODE_BOTH},
+    {0x11U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x19U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_MODE_BOTH},
+    {0x22U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_MODE_BOTH},
+    {0x27U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
+     UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
+    {0x28U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_MODE_BOTH},
+    {0x2FU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_EXTENDED, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x31U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
+     UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
+    {0x34U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x36U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x37U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x3EU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_MODE_BOTH},
+    {0x85U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+};
+
+const UdsServiceAttribute *uds_service_attribute(uint8_t sid, uint8_t subservice) {
+    const UdsServiceAttribute *fallback = NULL;
+    for (size_t index = 0U; index < (sizeof(service_attributes) / sizeof(service_attributes[0]));
+         ++index) {
+        const UdsServiceAttribute *attribute = &service_attributes[index];
+        if (attribute->sid != sid)
+            continue;
+        if (attribute->subservice == subservice)
+            return attribute;
+        if (attribute->subservice == UDS_SERVICE_ANY_SUBFUNCTION)
+            fallback = attribute;
+    }
+    return (fallback != NULL) ? fallback : &default_service_attribute;
+}
+
+bool uds_service_attribute_allows(const UdsServiceAttribute *attribute, uint8_t session,
+                                  uint8_t security_level, UdsAddressMode address_mode) {
+    if (attribute == NULL)
+        return false;
+    if ((attribute->session_mask & session_mask(session)) == 0U)
+        return false;
+    if ((attribute->address_mode != UDS_ADDRESS_MODE_BOTH) &&
+        ((attribute->address_mode & address_mode) == 0U))
+        return false;
+    if ((attribute->security_mask != UDS_SECURITY_MASK_NONE) &&
+        ((attribute->security_mask & (uint16_t)(1U << security_level)) == 0U))
+        return false;
+    return true;
+}
+
+bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed) {
     if ((level == NULL) || (is_seed == NULL)) {
         return false;
     }
@@ -29,6 +107,30 @@ static bool security_subfunction_level(uint8_t subfunction, uint8_t *level, bool
         return true;
     case UDS_SECURITY_SEND_KEY_LEVEL_1:
         *level = UDS_SECURITY_LEVEL_1;
+        *is_seed = false;
+        return true;
+    case UDS_SECURITY_REQUEST_SEED_LEVEL_2:
+        *level = UDS_SECURITY_LEVEL_2;
+        *is_seed = true;
+        return true;
+    case UDS_SECURITY_SEND_KEY_LEVEL_2:
+        *level = UDS_SECURITY_LEVEL_2;
+        *is_seed = false;
+        return true;
+    case UDS_SECURITY_REQUEST_SEED_LEVEL_3:
+        *level = UDS_SECURITY_LEVEL_3;
+        *is_seed = true;
+        return true;
+    case UDS_SECURITY_SEND_KEY_LEVEL_3:
+        *level = UDS_SECURITY_LEVEL_3;
+        *is_seed = false;
+        return true;
+    case UDS_SECURITY_REQUEST_SEED_LEVEL_4:
+        *level = UDS_SECURITY_LEVEL_4;
+        *is_seed = true;
+        return true;
+    case UDS_SECURITY_SEND_KEY_LEVEL_4:
+        *level = UDS_SECURITY_LEVEL_4;
         *is_seed = false;
         return true;
     case UDS_SECURITY_REQUEST_SEED_LEVEL_5:
@@ -190,6 +292,7 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
         server->callbacks.transfer_data = NULL;
         server->callbacks.request_transfer_exit = NULL;
         server->callbacks.ecu_reset = NULL;
+        server->callbacks.ecu_reset_execute = NULL;
         server->callbacks.control_dtc_setting = NULL;
     }
     server->context = context;
@@ -210,6 +313,7 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     server->security_lockout_until_ms = 0U;
     server->security_seed_expiry_ms = 0U;
     server->pending_reset_reason = UDS_RESET_NORMAL;
+    server->pending_reset_subfunction = 0U;
     server->next_download_block = 1U;
     server->max_download_block_length = 0U;
     server->p2_server_ms = UDS_DEFAULT_P2_SERVER_MS;
@@ -238,6 +342,7 @@ void uds_server_apply_reset(UdsServer *server, UdsResetReason reason, uint32_t n
     server->max_download_block_length = 0U;
     server->reset_pending = false;
     server->pending_reset_reason = UDS_RESET_NORMAL;
+    server->pending_reset_subfunction = 0U;
     server->last_activity_ms = now_ms;
     security_reset_for_ecu_reset(server, now_ms, reason);
 }
@@ -287,10 +392,12 @@ UdsCallbackResult uds_server_request_session(UdsServer *server, uint8_t requeste
     if (requested_session == UDS_SESSION_PROGRAMMING) {
         server->reset_pending = true;
         server->pending_reset_reason = UDS_RESET_PROGRAMMING;
+        server->pending_reset_subfunction = 0U;
     } else if ((requested_session == UDS_SESSION_DEFAULT) &&
                (current_session != UDS_SESSION_DEFAULT)) {
         server->reset_pending = true;
         server->pending_reset_reason = UDS_RESET_NORMAL;
+        server->pending_reset_subfunction = 0U;
     }
     return UDS_RESULT_OK;
 }
@@ -354,9 +461,10 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
     if (result != UDS_RESULT_OK) {
         return callback_result(server, result, request, response, response_len, capacity);
     }
-    server->reset_pending = true;
-    server->pending_reset_reason = UDS_RESET_NORMAL;
     if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
+        server->reset_pending = true;
+        server->pending_reset_reason = UDS_RESET_NORMAL;
+        server->pending_reset_subfunction = subfunction;
         return UDS_RESULT_NO_RESPONSE;
     }
     if (capacity < 2U) {
@@ -366,6 +474,9 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
     response[0] = 0x51U;
     response[1] = subfunction;
     *response_len = 2U;
+    server->reset_pending = true;
+    server->pending_reset_reason = UDS_RESET_NORMAL;
+    server->pending_reset_subfunction = subfunction;
     return UDS_RESULT_OK;
 #else
     (void)server;
@@ -467,7 +578,7 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
     uint8_t subfunction = request[1];
     uint8_t level = 0U;
     bool is_seed = false;
-    if (!security_subfunction_level(subfunction, &level, &is_seed)) {
+    if (!uds_security_subfunction_level(subfunction, &level, &is_seed)) {
         return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
                                  capacity);
     }
@@ -824,16 +935,38 @@ static UdsCallbackResult service_dtc_setting(UdsServer *server, const uint8_t *r
 #endif
 }
 
-UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, uint16_t request_len,
-                                    uint8_t *response, uint16_t *response_len, uint16_t capacity,
-                                    uint32_t now_ms) {
+UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *request,
+                                              uint16_t request_len, uint8_t *response,
+                                              uint16_t *response_len, uint16_t capacity,
+                                              UdsAddressMode address_mode, uint32_t now_ms) {
     if ((server == NULL) || (request == NULL) || (response == NULL) || (response_len == NULL) ||
         (capacity == 0U) || (request_len == 0U) || (request_len > UDS_MAX_REQUEST_LENGTH)) {
         return UDS_RESULT_ERROR;
     }
+    if ((address_mode != UDS_ADDRESS_PHYSICAL) && (address_mode != UDS_ADDRESS_FUNCTIONAL)) {
+        return UDS_RESULT_ERROR;
+    }
+    uint8_t service = request[0];
+    const UdsServiceAttribute *attribute = uds_service_attribute(
+        service, (request_len > 1U) ? (request[1] & 0x7FU) : UDS_SERVICE_ANY_SUBFUNCTION);
+    if (attribute->sid != 0U) {
+        if ((attribute->address_mode != UDS_ADDRESS_MODE_BOTH) &&
+            ((attribute->address_mode & address_mode) == 0U)) {
+            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+                                     response, response_len, capacity);
+        }
+        if ((attribute->session_mask & session_mask(server->session)) == 0U) {
+            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+                                     response, response_len, capacity);
+        }
+        if ((attribute->security_mask != UDS_SECURITY_MASK_NONE) &&
+            ((attribute->security_mask & (uint16_t)(1U << server->security_level)) == 0U)) {
+            return negative_response(request, UDS_NRC_SECURITY_ACCESS_DENIED, response,
+                                     response_len, capacity);
+        }
+    }
     *response_len = 0U;
     server->last_activity_ms = now_ms;
-    uint8_t service = request[0];
     switch (service) {
     case 0x10U:
         return service_session_control(server, request, request_len, response, response_len,
@@ -889,6 +1022,13 @@ UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms) {
     return UDS_RESULT_OK;
 }
 
+UdsCallbackResult uds_server_handle(UdsServer *server, const uint8_t *request, uint16_t request_len,
+                                    uint8_t *response, uint16_t *response_len, uint16_t capacity,
+                                    uint32_t now_ms) {
+    return uds_server_handle_addressed(server, request, request_len, response, response_len,
+                                       capacity, UDS_ADDRESS_PHYSICAL, now_ms);
+}
+
 void uds_server_set_timing(UdsServer *server, uint32_t s3_timeout_ms,
                            uint32_t security_initial_delay_ms, uint32_t security_lockout_ms,
                            uint32_t security_seed_timeout_ms, uint8_t security_max_attempts) {
@@ -916,9 +1056,26 @@ bool uds_server_reset_pending(const UdsServer *server) {
     return (server != NULL) && server->reset_pending;
 }
 
+UdsCallbackResult uds_server_complete_reset(UdsServer *server) {
+    if (server == NULL)
+        return UDS_RESULT_ERROR;
+    if (!server->reset_pending)
+        return UDS_RESULT_SEQUENCE_ERROR;
+    if (server->callbacks.ecu_reset_execute == NULL)
+        return UDS_RESULT_NOT_SUPPORTED;
+    uint8_t subfunction = server->pending_reset_subfunction;
+    server->callbacks.ecu_reset_execute(server->context, subfunction);
+    server->reset_pending = false;
+    server->pending_reset_reason = UDS_RESET_NORMAL;
+    server->pending_reset_subfunction = 0U;
+    return UDS_RESULT_OK;
+}
+
 void uds_server_clear_reset(UdsServer *server) {
     if (server != NULL) {
         server->reset_pending = false;
+        server->pending_reset_reason = UDS_RESET_NORMAL;
+        server->pending_reset_subfunction = 0U;
     }
 }
 

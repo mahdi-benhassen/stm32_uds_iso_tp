@@ -35,7 +35,9 @@ The default configured values are `P2 = 50 ms` and `P2* = 5000 ms`. They are con
 
 Every accepted session request invalidates the active security level and any pending seed, stops an active download context, and resets its transfer block counter. A request for Default from a non-default session marks a normal reset as pending because the Issue #7 screenshot associates that path with complete reset behavior. A request for Programming marks a programming reset as pending because the Issue #8 policy requires a reset path that avoids the normal initial security delay.
 
-The transport-independent application must perform the physical reset and then call:
+The transport-independent application must not reset from the request callback. For ECUReset (`0x11`), the callback only authorizes/prepares the request; the positive response is submitted first and the application-owned executor is called after the endpoint’s TX completion boundary. The detailed metadata and reset API are documented in [service_attributes.md](service_attributes.md).
+
+For a reset that is already represented as pending by a session transition, the application may perform its platform reset at its chosen completion point and then call:
 
 ```c
 uds_server_apply_reset(&server, UDS_RESET_NORMAL, now_ms);
@@ -76,7 +78,7 @@ UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms);
 uint8_t uds_server_session(const UdsServer *server);
 ```
 
-The library has no STM32 HAL, CMSIS, sleep, delay, heap, or reset-register dependency. The application owns the actual reset mechanism and invokes the reset-application hook after the hardware reset event has occurred.
+The library has no STM32 HAL, CMSIS, sleep, delay, heap, or reset-register dependency. The application owns the actual reset mechanism. For ECUReset responses, configure the endpoint’s optional `tx_complete` callback when transport completion is asynchronous and call `uds_isotp_endpoint_tx_complete()` after the final frame; the endpoint then invokes `ecu_reset_execute`. After the platform reset returns or on the next boot, the application can use `uds_server_apply_reset()` to reinitialize logical state.
 
 ## Test coverage
 

@@ -11,11 +11,14 @@ typedef struct {
     CAN_HandleTypeDef *hcan;
     uint32_t request_id;
     uint32_t response_id;
+    uint32_t tx_mailbox_mask;
+    bool tx_pending;
 } UdsCanTransport;
 
 void uds_can_transport_init(UdsCanTransport *transport, CAN_HandleTypeDef *hcan,
                             uint32_t request_id, uint32_t response_id);
 bool uds_can_transport_send(void *context, const IsoTpCanFrame *frame);
+bool uds_can_transport_tx_complete(void *context);
 uint32_t uds_can_transport_clock(void *context);
 
 #endif

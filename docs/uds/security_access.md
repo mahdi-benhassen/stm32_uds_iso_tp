@@ -15,14 +15,17 @@ The states are:
 
 ## Security-level mapping
 
-The issue images show `27h 02h` for the first unlocked level and `27h 0Ah` for a second unlocked level. Under the standard odd/even subfunction pairing, the implementation maps these as follows:
+The issue images show `27h 02h` for the first unlocked level and `27h 0Ah` for a second unlocked level. The authoritative `uds_security_subfunction_level()` function uses the explicit odd/even mapping below:
 
 | Security level | Request Seed | Send Key | Policy |
 |---|---:|---:|---|
 | Level 1 | `0x01` | `0x02` | Supported in Extended and Programming sessions |
+| Level 2 | `0x03` | `0x04` | Callback-defined; wire mapping is supported |
+| Level 3 | `0x05` | `0x06` | Callback-defined; wire mapping is supported |
+| Level 4 | `0x07` | `0x08` | Callback-defined; wire mapping is supported |
 | Level 5 | `0x09` | `0x0A` | Supported in Extended and Programming sessions |
 
-The screenshot labels the `0x0A` path “Unlocked (Level 2)”, while the UDS subfunction pairing convention identifies `0x09/0x0A` as a level-5 pair. This is a documented interpretation of an image-label mismatch; the wire subfunctions are preserved exactly and the callback receives the mapped level value.
+The screenshot labels the `0x0A` path “Unlocked (Level 2)”, while the UDS subfunction pairing convention identifies `0x09/0x0A` as a level-5 pair. This is a documented interpretation of an image-label mismatch; the wire subfunctions are preserved exactly and the callback receives the mapped level value. The current repository reference provider implements only Levels 1 and 5; Levels 2–4 remain application-callback responsibilities.
 
 Other subfunctions are rejected with NRC `0x12` (`SubFunctionNotSupported`). The implementation does not silently treat every odd/even value below `0x80` as supported.
 
@@ -60,7 +63,7 @@ At the exact lockout-expiration boundary, `uds_server_tick()` clears the delay a
 
 ## Session and reset interaction
 
-Security Access is permitted only in Extended (`0x03`) and Programming (`0x02`) sessions. Default and Safety sessions return NRC `0x7F` (`ServiceNotSupportedInActiveSession`) for Security Access requests. The policy is explicit and centralized in the UDS core.
+Security Access is permitted only in Extended (`0x03`) and Programming (`0x02`) sessions. Default and Safety sessions return NRC `0x7F` (`ServiceNotSupportedInActiveSession`) for Security Access requests. The service metadata and address/session/security bitmask conventions are described in [service_attributes.md](service_attributes.md); the SecurityAccess state machine remains centralized in the UDS core.
 
 Every accepted session change invalidates the current seed and security level and returns security to Locked, while an active failed-attempt lockout remains active. A session transition does not silently preserve an unlocked state. A normal ECU reset clears the failed-attempt counter, invalidates the seed, returns to Default Session, and starts the 10-second initial delay. A programming reset clears the same security state but skips that initial delay. S3 expiration returns to Default and locks security without manufacturing a new power-on delay.
 
@@ -75,6 +78,16 @@ All security timers use monotonic `uint32_t` timestamps and wrap-safe comparison
 The seed timeout is configurable through `uds_server_set_timing()` and defaults to `10000 ms`. It invalidates a pending seed at the exact expiry boundary. The initial delay and lockout are also tested at `timeout - 1 ms`, `timeout`, and `timeout + 1 ms` using a deterministic clock.
 
 ## Public inspection/configuration API
+
+The generic service-policy inspection functions are:
+
+```c
+bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed);
+const UdsServiceAttribute *uds_service_attribute(uint8_t sid, uint8_t subservice);
+bool uds_service_attribute_allows(const UdsServiceAttribute *attribute, uint8_t session,
+                                  uint8_t security_level, UdsAddressMode address_mode);
+```
+
 
 ```c
 void uds_server_apply_reset(UdsServer *server, UdsResetReason reason, uint32_t now_ms);

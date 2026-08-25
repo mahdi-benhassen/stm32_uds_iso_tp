@@ -141,12 +141,20 @@ No blocking delay, `HAL_Delay()`, `sleep()`, busy loop, or platform register is 
 
 | File | Reason |
 |---|---|
-| `library/include/uds_iso_tp/uds.h` | Adds four-session constants, security state enum, reset reason enum, timing defaults, explicit server state fields, policy/reset/configuration/getter APIs |
-| `library/src/uds.c` | Implements centralized transition policy, session side effects, initial delay, seed lifetime, failed-attempt lockout, NRC handling, wrap-safe S3 timing, and reset application |
+| `library/include/uds_iso_tp/uds.h` | Adds four-session constants, explicit odd/even SecurityAccess mapping, session/security/address metadata, addressed dispatch, deferred reset state, timing defaults, and policy/reset APIs |
+| `library/src/uds.c` | Implements centralized transition policy, service metadata checks, addressing checks, initial delay, seed lifetime, failed-attempt lockout, NRC handling, wrap-safe S3 timing, and deferred reset completion |
+| `library/include/uds_iso_tp/isotp.h` | Adds configurable frame padding, optional full-duplex mode, and event metadata while preserving independent RX/TX contexts |
+| `library/src/isotp.c` | Serializes padding at the frame boundary and applies optional full-duplex unexpected-N_PDU behavior without altering logical payload lengths |
+| `library/include/uds_iso_tp/endpoint.h` | Adds functional request ID, bounded control/response queue state, optional TX-completion callback, and deferred reset completion API |
+| `library/src/endpoint.c` | Composes independent RX/TX paths, classifies physical/functional IDs, queues simultaneous traffic, and invokes reset execution only after response completion |
 | `tests/security/uds_security_reference.h` | Defines the explicitly non-production reference/test algorithm, key-calculation and callback APIs, and provider state declarations |
 | `tests/security/uds_security_reference.c` | Implements deterministic seed generation, bytewise test-key calculation, callback adapters, and direct-provider timing tests |
 | `tools/security_test_key.c` | Provides the dependency-free host manual calculator for displayed four-byte seeds |
-| `library/tests/uds/test_uds.c` | Adjusts the existing smoke test to pass the new initial security delay explicitly before testing the legacy callback path |
+| `App/Src/uds_app.c` | Wires physical/functional IDs, mailbox completion, and application-owned ECUReset callbacks into the F767 example |
+| `App/Src/can_transport.c` | Tracks bxCAN TX mailbox completion without blocking or delaying the generic layer |
+| `App/Src/uds_platform.c` | Owns the target-specific `NVIC_SystemReset()` executor |
+| `library/tests/uds/test_uds.c` | Covers explicit SecurityAccess mapping, service metadata, functional-address policy, and existing UDS service flows |
+| `library/tests/uds/test_endpoint.c` | Covers endpoint full-duplex overlap, bounded control/response queueing, deferred ECUReset completion, invalid reset type, and suppressed response |
 | `library/tests/uds/test_session_security.c` | Adds deterministic unit coverage for Issues #7/#8, reference vectors, callback integration, and the test-layer provider without hardware or real sleeps |
 | `library/CMakeLists.txt` | Keeps the generic library and portability object provider-free; registers the session/security contract and reference utility tests in CTest |
 | `docs/uds/session_control.md` | Documents Session Control policy and API |
@@ -194,11 +202,11 @@ The final local validation run passed:
 | ASan/UBSan build and CTest | PASS; 5/5 core suites |
 | Strict C99 host portability build | PASS |
 | Cortex-M0+ ARM GCC freestanding compile | PASS with `ISOTP_MAX_PAYLOAD=4095` |
-| Coverage | PASS; 63% total generic-library source coverage in the completed run; 86% `isotp.c`, 77% `uds.c`, and reference/test code measured separately |
+| Coverage | PASS; 67% total generic-library source coverage, with 88% `isotp.c`, 79% `uds.c`, and 87% `endpoint.c` in the current run |
 | clang-format | PASS |
 | clang-tidy | PASS |
 | cppcheck | PASS; standard informational too-many-configurations note only |
-| STM32F767 cross-build | PASS; 24,244 B Flash and 39,096 B RAM in the final run |
+| STM32F767 cross-build | PASS; 26,784 B Flash and 43,304 B RAM in the current run |
 | Classical CAN HIL runner | Dry-run only; 15 cases |
 | CAN-FD HIL runner | Dry-run only; 18 cases |
 | Physical STM32C092/STM32F767 HIL | Not executed; hardware and analyzer unavailable |
@@ -207,7 +215,8 @@ The hosted workflow should run the same expanded CTest and portability gates aft
 
 ## 6. Memory and embedded-safety impact
 
-The change adds state fields to `UdsServer` but does not add payload-sized buffers, heap allocation, recursion, or large local arrays. The C092-compatible build continues to use `ISOTP_MAX_PAYLOAD=4095`. The existing C092 memory finding remains valid: the application must choose a payload bound based on its complete map file and stack margin. The new timing/state fields are small compared with the transport buffers.
+The change adds state fields to `UdsServer` and bounded endpoint queue storage but does not add heap allocation, recursion, or unbounded loops. Payload-sized transport buffers remain governed by the existing `ISOTP_MAX_PAYLOAD` configuration.
+ The C092-compatible build continues to use `ISOTP_MAX_PAYLOAD=4095`. The existing C092 memory finding remains valid: the application must choose a payload bound based on its complete map file and stack margin. The new timing/state fields are small compared with the transport buffers.
 
 The default 16,384-byte payload bound is not increased. The application-owned reset and security callbacks remain deterministic seams; no cryptographic algorithm is claimed as production-safe.
 
@@ -225,7 +234,22 @@ The implementation satisfies the written Issue #7/#8 software requirements and t
 
 **Issue #8 readiness:** ready for software review/closure based on the explicit protocol state machine, deterministic timing tests, NRC matrix, and callback security boundary; production cryptographic approval and physical HIL remain outstanding.
 
+**Follow-on issue readiness:** Issues #9–#12 have deterministic host coverage and target-build validation for the implemented software boundaries. Physical CAN/FDCAN behavior, application-specific service matrices, and target reset/completion measurements remain open validation work.
+
 This report does not claim formal ISO 14229 certification, production security, bootloader safety, or complete physical interoperability.
+
+## 8. Follow-on issues #9–#12
+
+The follow-on implementation preserves the existing layered architecture rather than creating a second transport or UDS stack.
+
+| Issue | Implementation | Host coverage | Boundary/limitation |
+|---|---|---|---|
+| #9 Full duplex | `IsoTpRx` and `IsoTpTx` remain independent; optional `full_duplex` mode handles same-N_AI SF/FF restart and ignores FC/unknown N_PDUs when no opposite-direction transfer is active. The endpoint adds separate bounded control and response pending storage. | Direct unexpected-N_PDU tests and endpoint overlap test cover inbound segmented traffic during outbound segmented response. | The endpoint has one bounded queued UDS response and one control slot; callers must drain it with regular `process()` calls. Table 23 behavior is software-tested, not physically proven. |
+| #10 Padding | `padding_enabled`, `padding_value`, and `isotp_config_set_padding()` apply fill bytes at frame serialization. Classic CAN uses DLC 8 when enabled; logical length remains N_PCI-derived. | SF, exact seven-byte SF, FF, FC, final CF, disabled/custom padding, CAN-FD fill, and receive-length tests. | The application transport must preserve emitted DLC/data bytes when handing frames to hardware. |
+| #11 Service attributes | `UdsServiceAttribute` centralizes session, allowed-security-level, and address-mode metadata. `address_mode=0` means both; endpoint classifies `request_id` as physical and optional `functional_request_id` as functional. Odd/even SecurityAccess levels 1–5 are explicitly mapped by one public function. | Metadata, mapping, functional read dispatch, physical-only rejection, session restrictions, and protected-attribute tests. | The table is a repository baseline; an ECU-specific policy may replace/extend it. Functional negative-response policy is represented by existing NRC `0x7F` in this implementation. |
+| #12 ECUReset | `ecu_reset` authorizes; the positive response is queued first; optional asynchronous `tx_complete` and `uds_isotp_endpoint_tx_complete()` define final-frame completion; `ecu_reset_execute` is application-owned. | Response-before-reset, delayed completion, invalid type, suppressed response, and missing-executor behavior. | No fixed delay can prove physical CAN completion. The target application must define the send/completion semantics and own the actual reset primitive. |
+
+The attached issue screenshots/documents were used only to confirm the requirements: Table 23’s full-duplex distinctions, Table 34’s DLC-8/`0xCC` padding, SID attribute columns, and the ECUReset response-before-reset complaint. They do not define a production SecurityAccess algorithm; the repository continues to use only the explicitly labeled test/reference algorithm.
 
 ## References
 
