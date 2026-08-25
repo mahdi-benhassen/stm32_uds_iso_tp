@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Validate standards and physical-validation artifacts for repository CI."""
 from __future__ import annotations
 
@@ -81,6 +81,30 @@ def main() -> int:
     f767_profile = (ROOT / "App/Inc/uds_app_config.h").read_text(encoding="utf-8")
     if "UDS_APP_CLASSIC_PADDING_ENABLED 1U" not in f767_profile or "0xCCU" not in f767_profile:
         raise SystemExit("F767 application profile must explicitly enable 0xCC padding")
+
+    bxcan_header = (ROOT / "App/Inc/can_transport.h").read_text(encoding="utf-8")
+    bxcan_transport = (ROOT / "App/Src/can_transport.c").read_text(encoding="utf-8")
+    bxcan_app = (ROOT / "App/Src/uds_app.c").read_text(encoding="utf-8")
+    if "tx_pending" in bxcan_header + bxcan_transport + bxcan_app:
+        raise SystemExit("F767 bxCAN application transport must not depend on tx_pending")
+    bxcan_required_tokens = (
+        "HAL_CAN_AddTxMessage",
+        "HAL_CAN_IsTxMessagePending",
+        "tx_mailbox_mask",
+    )
+    missing = [token for token in bxcan_required_tokens if token not in bxcan_header + bxcan_transport]
+    if missing:
+        raise SystemExit(f"F767 bxCAN completion contract missing required content: {missing}")
+    if "HAL_Delay" in bxcan_header + bxcan_transport + bxcan_app:
+        raise SystemExit("Issue #13 bxCAN path must not introduce an artificial delay")
+
+    endpoint_source = (ROOT / "library/src/endpoint.c").read_text(encoding="utf-8")
+    c092_header = (C092_DIR / "can_transport_fdcan.h").read_text(encoding="utf-8")
+    c092_source = c092_transport
+    if ("tx_pending" not in endpoint_source) or ("uds_server_complete_reset" not in endpoint_source):
+        raise SystemExit("generic endpoint must retain protocol-owned tx_pending and reset completion")
+    if ("tx_pending" not in c092_header + c092_source) or ("FDCAN_TX_EVENT" not in c092_source):
+        raise SystemExit("C092 FDCAN adapter must retain hardware-specific TX event state")
 
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):

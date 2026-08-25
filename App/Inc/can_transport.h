@@ -11,8 +11,8 @@ typedef struct {
     CAN_HandleTypeDef *hcan;
     uint32_t request_id;
     uint32_t response_id;
+    /* Bitmask of HAL mailboxes accepted but not yet reported idle. */
     uint32_t tx_mailbox_mask;
-    bool tx_pending;
 } UdsCanTransport;
 
 void uds_can_transport_init(UdsCanTransport *transport, CAN_HandleTypeDef *hcan,
