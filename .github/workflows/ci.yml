@@ -116,7 +116,7 @@ jobs:
             tests/host/test_sdo.py \
             middleware/canopen/examples/canopen_vcan_device.py \
             tests/test_canopen_wire_contract.py \
-            middleware/diagnostics/uds_isotp.py \
+            library/compat/legacy_diagnostics/uds_isotp.py \
             tests/test_uds_isotp.py \
             tests/run_uds_isotp_contract.py \
             scripts/cia418_catalog.py \
