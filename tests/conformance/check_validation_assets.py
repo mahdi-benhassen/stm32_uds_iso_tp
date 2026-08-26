@@ -129,6 +129,14 @@ def main() -> int:
         "uds_c092_diagnostic_is_ready",
         "uds_c092_filter_accept",
         "uds_c092_app_attach_diagnostics",
+        "UDS_C092_BOOT_FDCAN_INIT_START",
+        "UDS_C092_BOOT_RX_ACCEPTED",
+        "UDS_C092_BOOT_RX_DROPPED_NOT_READY",
+        "UDS_C092_BOOT_RX_MAILBOX_FULL",
+        "UDS_C092_BOOT_UDS_RESPONSE_GENERATED",
+        "UDS_C092_BOOT_TX_COMPLETE",
+        "rx_accepted_count",
+        "rx_mailbox_full_count",
     )
     missing = [
         token

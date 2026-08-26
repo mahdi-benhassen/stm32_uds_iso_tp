@@ -56,6 +56,12 @@ def main() -> int:
     if "FDCAN_NO_TX_EVENTS" in main_c:
         warnings.append("unused generated TX header still says FDCAN_NO_TX_EVENTS; adapter headers must store events")
 
+    app_init_pos = main_c.find("uds_c092_app_init_default")
+    notification_pos = main_c.find("HAL_FDCAN_ActivateNotification")
+    start_pos = main_c.find("HAL_FDCAN_Start")
+    if not (0 <= app_init_pos < notification_pos < start_pos):
+        errors.append("application/ISO-TP/UDS initialization must precede RX notification and FDCAN Start")
+
     if errors:
         print(f"C092 generated integration contract FAILED: {root}")
         for error in errors:
