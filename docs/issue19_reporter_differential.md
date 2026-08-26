@@ -69,7 +69,7 @@ prior:  t=1.1884  7E0  02 11 01 ...
         t=1.1902  7E0  02 10 01 ...
 ```
 
-The `10 01` frame is visible on the bus, but the capture contains no evidence that it entered the post-reset RX FIFO, reached the application pending handoff, completed ISO-TP, or reached UDS dispatch. The generated application has no `READY` indication and the maintained policy intentionally does not buffer an unlimited number of frames across boot. Therefore the most likely remaining failure is **a tester request racing the reboot/startup window combined with missing readiness observability**, not a new generic ECUReset state-machine defect.
+The `10 01` frame is visible on the bus, but the capture contains no evidence that it entered the post-reset RX FIFO, reached the application pending handoff, completed ISO-TP, or reached UDS dispatch. The generated application has no `READY` indication and the reporter project still has no bounded startup instrumentation. The maintained correction now accepts a valid frame into a single bounded mailbox after FDCAN start even while the trace is `BOOTING`; only a simultaneous second frame is counted as `RX_MAILBOX_FULL`. Therefore the capture still most strongly indicates a tester request racing the reboot/startup window in the reporter image, while the corrected implementation provides the evidence needed to distinguish that race from a lower-layer failure.
 
 ## What is and is not proven
 
@@ -86,7 +86,7 @@ The `10 01` frame is visible on the bus, but the capture contains no evidence th
 
 ## Correct next correction
 
-The generated project must be updated, not the generic reset algorithm copied again. Its application-owned startup should attach a `UdsC092DiagnosticTrace`, mark each successful HAL/FDCAN/endpoint stage, and expose or record the transition to `UDS_C092_DIAG_READY`. Its RX callback should use `uds_c092_fdcan_data_length_bytes(rxHeader.DataLength)` and pass the actual Classic/FD, BRS, identifier-type, and remote-frame metadata through `uds_c092_app_rx_from_isr_ex()`.
+The generated project must be updated, not the generic reset algorithm copied again. Its application-owned startup should attach a `UdsC092DiagnosticTrace`, mark each successful HAL/FDCAN/endpoint stage, and expose or record the transition to `UDS_C092_DIAG_READY`. The maintained application no longer gates mailbox capture on this higher-level READY mark; it records accepted frames and processes them from mainline once endpoint initialization is complete. Its RX callback should use `uds_c092_fdcan_data_length_bytes(rxHeader.DataLength)` and pass the actual Classic/FD, BRS, identifier-type, and remote-frame metadata through `uds_c092_app_rx_from_isr_ex()`.
 
 The tester must send `10 01` only after the project-defined ready indication, or use a bounded readiness-aware retry policy. A fixed delay may be used experimentally to measure the window, but it must not be treated as the ECUReset correctness mechanism. The next HIL trace must record `RESET_ENTRY`, `FDCAN_STARTED`, `UDS_INIT_DONE`, `READY`, RX arrival, UDS dispatch, TX submission, and TX completion timestamps. Without those points, the remaining distinction between “request during boot” and “post-reset FDCAN/RX failure” cannot be made from the current captures.
 
@@ -121,11 +121,20 @@ uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_CLOCK_READY, HAL_GetTick());
 /* after MX_GPIO_Init() succeeds */
 uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_GPIO_READY, HAL_GetTick());
 
+/* immediately before MX_FDCAN1_Init() */
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_INIT_START, HAL_GetTick());
+
 /* after MX_FDCAN1_Init() succeeds */
 uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_INIT_DONE, HAL_GetTick());
 
 /* after both exact filters and the global filter succeed */
-uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_FILTER_READY, HAL_GetTick());
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_FILTER_DONE, HAL_GetTick());
+
+/* Initialize transport and endpoint before enabling RX notification. */
+uds_c092_fdcan_transport_init(&uds_transport, &hfdcan1,
+                              UDS_C092_REQUEST_ID, UDS_C092_RESPONSE_ID);
+uds_c092_app_attach_diagnostics(&uds_trace);
+uds_c092_app_init_default(&uds_transport, uds_c092_platform_now_ms());
 
 if (HAL_FDCAN_ActivateNotification(
         &hfdcan1,
@@ -134,18 +143,13 @@ if (HAL_FDCAN_ActivateNotification(
     uds_c092_diagnostic_fault(&uds_trace, HAL_GetTick());
     Error_Handler();
 }
-uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_NOTIFICATION_READY, HAL_GetTick());
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_NOTIFICATION_DONE, HAL_GetTick());
 
 if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
     uds_c092_diagnostic_fault(&uds_trace, HAL_GetTick());
     Error_Handler();
 }
-uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_STARTED, HAL_GetTick());
-
-uds_c092_fdcan_transport_init(&uds_transport, &hfdcan1,
-                              UDS_C092_REQUEST_ID, UDS_C092_RESPONSE_ID);
-uds_c092_app_attach_diagnostics(&uds_trace);
-uds_c092_app_init_default(&uds_transport, uds_c092_platform_now_ms());
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_FDCAN_START_DONE, HAL_GetTick());
 uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_DIAGNOSTIC_READY, HAL_GetTick());
 ```
 

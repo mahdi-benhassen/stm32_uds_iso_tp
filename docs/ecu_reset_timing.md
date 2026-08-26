@@ -34,7 +34,7 @@ The response must be generated before reset execution. Queue acceptance is not a
 
 After `NVIC_SystemReset()`, all board-owned initialization must run again. The platform should mark `UDS_C092_DIAG_READY` only after HAL, clock, GPIO, FDCAN initialization, filters, required notifications, FDCAN start, transport initialization, and UDS endpoint initialization have succeeded.
 
-Frames received before readiness are handled according to the bounded policy: they are counted and dropped, not buffered without limit and not passed into partially initialized ISO-TP state. The tester must wait for the platform’s diagnostic-ready indication.
+After FDCAN start and RX-notification activation, valid frames are captured in the bounded application mailbox even if the diagnostic trace is still `BOOTING`; they are not discarded merely because the higher-level READY mark has not yet been recorded. If the mailbox is occupied, the additional frame is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should still wait for the platform’s diagnostic-ready indication so the reset-to-ready interval can be measured and reported.
 
 ## Measurement record
 

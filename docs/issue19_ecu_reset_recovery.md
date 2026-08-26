@@ -7,7 +7,7 @@
 
 ## Executive status
 
-Issue #19 is a **platform and transport lifecycle issue**, not a reason to add a fixed 50 ms delay to the generic UDS library. The implementation now provides an explicit C092 diagnostic readiness state, optional bounded boot timestamps and counters, deterministic dropping of frames received before readiness, stricter ECUReset endpoint initialization, and host coverage for repeated reset/reconnect behavior.
+Issue #19 is a **platform and transport lifecycle issue**, not a reason to add a fixed 50 ms delay to the generic UDS library. The implementation now provides an explicit C092 diagnostic readiness state, optional bounded boot timestamps and counters, bounded RX-mailbox handling after FDCAN start, stricter ECUReset endpoint initialization, and host coverage for repeated reset/reconnect behavior.
 
 The software changes are validated by host and ARM GCC checks. **The issue cannot be marked hardware-fixed yet** because no STM32C092 board, CAN analyzer trace, Keil MDK/Arm Compiler 6 build, reset-cause capture, or measured reset-to-diagnostic-ready interval was available in this environment.
 
@@ -21,10 +21,10 @@ The source-level defects and acceptance risks identified are as follows.
 |---|---|---|
 | Queue acceptance is not physical TX completion | The generic endpoint previously treated a successful `send_frame()` with no `tx_complete` callback as immediately complete. | ECUReset could execute without a transport-defined final-frame completion boundary. |
 | ECUReset requires an explicit completion contract | The maintained C092 application supplies `uds_c092_fdcan_tx_complete()`, which waits for a matching stored TX event. A reset-capable generic endpoint previously did not enforce that requirement. | An application could configure reset without the information needed to safely execute it. |
-| Post-reset readiness was implicit | The C092 application had no platform-owned BOOTING/READY/FAULT state or bounded trace showing when HAL, FDCAN, filters, notifications, ISO-TP, and UDS were ready. | A tester request arriving during startup could be lost or be delivered to a partially initialized path without a defined policy. |
+| Readiness gating could discard a valid post-start frame | The first implementation dropped a valid frame whenever the higher-level diagnostic trace was not yet `READY`. | A request received after FDCAN start could be lost even though the bounded RX handoff was usable. The corrected application retains it in the mailbox and records `RX_ACCEPTED`. |
 | The reporter project’s exact runtime stop point is unproven | The supplied project has no physical trace in the repository showing whether the next frame was received, parsed, responded to, queued, or transmitted. | A fixed delay would conceal the failing stage rather than identify it. |
 
-The corrected conclusion is therefore: **the repository had an unsafe generic completion fallback and no explicit C092 readiness contract; the reporter’s exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
+The corrected conclusion is therefore: **the repository had an unsafe generic completion fallback, lacked explicit C092 readiness instrumentation, and initially gated mailbox capture on the higher-level READY state. The corrected C092 application keeps valid post-start frames in a bounded mailbox; the reporter’s exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
 
 ## Corrected architecture
 
@@ -57,14 +57,16 @@ The platform-owned `UdsC092DiagnosticTrace` records optional first-event timesta
 | `HAL_INIT_DONE` | `HAL_Init()` returned and system reset peripherals are available. |
 | `CLOCK_READY` | Clock configuration completed successfully. |
 | `GPIO_READY` | GPIO and transceiver-control setup completed. |
+| `FDCAN_INIT_START` | The board-owned FDCAN initialization call began. |
 | `FDCAN_INIT_DONE` | `MX_FDCAN1_Init()` / `HAL_FDCAN_Init()` completed. |
-| `FDCAN_FILTER_READY` | Standard physical/functional filters and global filter completed. |
-| `FDCAN_NOTIFICATION_READY` | Required RX notification was enabled successfully. |
-| `FDCAN_STARTED` | `HAL_FDCAN_Start()` completed successfully. |
-| `UDS_INIT_DONE` | Transport and endpoint state were initialized to clean ISO-TP/UDS state. |
-| `DIAGNOSTIC_READY` | All required stages are complete; the application may accept diagnostic frames. |
+| `FDCAN_FILTER_DONE` | Exact physical/functional filters and the global filter completed. |
+| `FDCAN_NOTIFICATION_DONE` | Required RX notification was enabled successfully. |
+| `FDCAN_START_DONE` | `HAL_FDCAN_Start()` completed successfully. |
+| `ISOTP_INIT_DONE` | Transport and endpoint ISO-TP state were initialized to clean state. |
+| `UDS_INIT_DONE` | UDS server state was initialized to clean state. |
+| `DIAGNOSTIC_READY` | All required stages are complete; the application may report readiness. Valid frames received after FDCAN start are captured in the bounded mailbox even before this mark. |
 
-The implementation intentionally does not define a magic 10, 20, or 50 ms delay. A frame received while `BOOTING` is counted and dropped rather than buffered indefinitely. The tester must wait for a project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
+The implementation intentionally does not define a magic 10, 20, or 50 ms delay. Once FDCAN is started and RX notification is active, a valid frame is accepted into the single bounded mailbox even if the diagnostic trace is still `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. A second frame while that mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should wait for the project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
 
 ## ECUReset ordering
 
@@ -82,13 +84,13 @@ The following software evidence is available:
 
 | Check | Result |
 |---|---|
-| Standalone host contracts | **12/12 passed** after Issue #19 additions. |
-| ASan/UBSan host suite | Planned and required in the final validation run; no hardware claim follows from it. |
+| Standalone host contracts | **13/13 passed** after the readiness/mailbox correction. |
+| ASan/UBSan host suite | **13/13 passed** after the readiness/mailbox correction; no hardware claim follows from it. |
 | Reset recovery contract | 100 reset cycles with 10 normal requests per cycle, totaling 1,000 post-reset requests in the host model. |
 | Service sequence contract | Post-reset `0x10`, `0x22` with multi-frame response, `0x3E`, invalid request recovery, and subsequent valid request. |
 | Endpoint safety contract | ECUReset configuration without `tx_complete` is rejected. |
-| C092 diagnostic contract | Readiness ordering, boot-time drop, fault state, reset reinitialization, and lifecycle counters. |
-| C092 portability | Must be rerun against the supplied reporter HAL headers after final source changes. |
+| C092 diagnostic contract | Readiness ordering, post-start mailbox acceptance/full handling, fault state, reset reinitialization, and lifecycle counters. |
+| C092 portability | **Passed** against the supplied reporter HAL headers after the final source changes. |
 
 These are host, static, and cross-compile contracts. They are not physical CAN evidence.
 
