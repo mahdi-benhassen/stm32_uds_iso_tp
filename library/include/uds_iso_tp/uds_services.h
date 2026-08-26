@@ -13,7 +13,11 @@ typedef UdsCallbackResult (*UdsServiceHandlerFn)(void *context, const uint8_t *r
                                                  uint16_t *response_length,
                                                  uint16_t response_capacity);
 
+typedef UdsCallbackResult (*UdsMemoryAccessFn)(void *context, uint8_t sid, const uint8_t *request,
+                                               uint16_t request_length);
+
 typedef struct {
+    UdsMemoryAccessFn check_access;   /* secure region/permission preflight */
     UdsServiceHandlerFn read_memory;  /* 0x23 */
     UdsServiceHandlerFn write_memory; /* 0x3D */
 } UdsMemoryServiceBackend;
@@ -33,6 +37,7 @@ typedef struct {
 } UdsTimingServiceBackend;
 
 typedef struct {
+    uint16_t max_pending_items;         /* nonzero application queue bound */
     UdsServiceHandlerFn periodic_data;  /* 0x2A */
     UdsServiceHandlerFn event_response; /* 0x86 */
 } UdsPeriodicEventServiceBackend;
@@ -60,6 +65,9 @@ struct UdsServiceBackends {
     const UdsSecuredDataServiceBackend *secured_data;
 };
 
+UdsCallbackResult uds_service_backends_preflight(const UdsServiceBackends *backends, void *context,
+                                                 uint8_t sid, const uint8_t *request,
+                                                 uint16_t request_length);
 UdsServiceHandlerFn uds_service_backends_handler(const UdsServiceBackends *backends, uint8_t sid);
 
 #endif
