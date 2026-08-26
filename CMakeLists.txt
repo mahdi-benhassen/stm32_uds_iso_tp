@@ -22,13 +22,19 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     library/src/uds.c
     library/src/uds_did.c
     library/src/uds_download.c
+    library/src/uds_dtc.c
+    library/src/uds_services.c
     library/src/endpoint.c
+    library/crypto/aes.c
+    library/crypto/aes_cmac.c
+    library/crypto/uds_security_cmac.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     App/Inc
     library/include
     library/include/uds_iso_tp
+    library/crypto
 )
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE

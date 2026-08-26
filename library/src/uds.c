@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: LicenseRef-STM32-UDS-Research-Education-Commercial-1.0
  */
 #include "uds.h"
+#include "uds_iso_tp/uds_dtc.h"
+#include "uds_iso_tp/uds_services.h"
 
 #include <stddef.h>
 
@@ -63,6 +65,34 @@ static const UdsServiceAttribute service_attributes[] = {
     {0x3EU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
      UDS_ADDRESS_MODE_BOTH},
     {0x85U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x83U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x84U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x86U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x87U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x23U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
+     UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
+    {0x24U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x2AU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x2CU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_EXTENDED, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x2EU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING | UDS_SESSION_MASK_EXTENDED,
+     UDS_SECURITY_MASK_NONE, UDS_ADDRESS_PHYSICAL},
+    {0x3DU, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x14U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x35U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x29U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_ALL, UDS_SECURITY_MASK_NONE,
+     UDS_ADDRESS_PHYSICAL},
+    {0x38U, UDS_SERVICE_ANY_SUBFUNCTION, UDS_SESSION_MASK_PROGRAMMING, UDS_SECURITY_MASK_NONE,
      UDS_ADDRESS_PHYSICAL},
 };
 
@@ -281,6 +311,8 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
         server->callbacks.ecu_reset = NULL;
         server->callbacks.ecu_reset_execute = NULL;
         server->callbacks.control_dtc_setting = NULL;
+        server->callbacks.clear_dtc = NULL;
+        server->callbacks.service_backends = NULL;
     }
     server->context = context;
     server->session = UDS_SESSION_DEFAULT;
@@ -474,21 +506,101 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
 #endif
 }
 
+static UdsCallbackResult service_clear_dtc(UdsServer *server, const uint8_t *request,
+                                           uint16_t request_len, uint8_t *response,
+                                           uint16_t *response_len, uint16_t capacity) {
+#if UDS_ENABLE_READ_DTC_INFORMATION
+    if (request_len != 4U) {
+        return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
+                                 response, response_len, capacity);
+    }
+    if (server->callbacks.clear_dtc == NULL) {
+        return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                 capacity);
+    }
+    uint32_t group = read_be_u32(&request[1], 3U);
+    UdsCallbackResult result = server->callbacks.clear_dtc(server->context, group);
+    if (result != UDS_RESULT_OK)
+        return callback_result(server, result, request, response, response_len, capacity);
+    if (capacity < 1U)
+        return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                 capacity);
+    response[0] = 0x54U;
+    *response_len = 1U;
+    return UDS_RESULT_OK;
+#else
+    (void)server;
+    return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                             capacity);
+#endif
+}
+
+static UdsCallbackResult service_modular_backend(UdsServer *server, const uint8_t *request,
+                                                 uint16_t request_len, uint8_t *response,
+                                                 uint16_t *response_len, uint16_t capacity) {
+    UdsServiceHandlerFn handler =
+        uds_service_backends_handler(server->callbacks.service_backends, request[0]);
+    if (handler == NULL)
+        return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                 capacity);
+    UdsCallbackResult result =
+        handler(server->context, request, request_len, response, response_len, capacity);
+    if (result == UDS_RESULT_NO_RESPONSE)
+        return result;
+    if (result != UDS_RESULT_OK)
+        return callback_result(server, result, request, response, response_len, capacity);
+    if (*response_len > capacity)
+        return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                 capacity);
+    return UDS_RESULT_OK;
+}
+
 static UdsCallbackResult service_read_dtc(UdsServer *server, const uint8_t *request,
                                           uint16_t request_len, uint8_t *response,
                                           uint16_t *response_len, uint16_t capacity) {
 #if UDS_ENABLE_READ_DTC_INFORMATION
-    if ((request_len < 2U) || (server->callbacks.read_dtc == NULL)) {
+    if (request_len < 2U) {
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
     uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
+    if (!uds_dtc_subfunction_supported(subfunction)) {
+        return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
+                                 capacity);
+    }
+    if (!uds_dtc_request_length_valid(subfunction, request_len)) {
+        return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
+                                 response, response_len, capacity);
+    }
+    if (capacity < 1U) {
+        return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                 capacity);
+    }
     response[0] = 0x59U;
     *response_len = 1U;
     uint16_t extra_length = 0U;
-    UdsCallbackResult result =
-        server->callbacks.read_dtc(server->context, subfunction, request, request_len, &response[1],
-                                   &extra_length, (capacity > 1U) ? (uint16_t)(capacity - 1U) : 0U);
+    UdsCallbackResult result;
+    if (server->callbacks.dtc_backend != NULL) {
+        const UdsDtcBackend *backend = server->callbacks.dtc_backend;
+        uint32_t required = uds_dtc_capability_for_subfunction(subfunction);
+        if ((backend->capabilities & required) == 0U) {
+            return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response,
+                                     response_len, capacity);
+        }
+        if (backend->report == NULL) {
+            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                     capacity);
+        }
+        result = backend->report(server->context, subfunction, request, request_len, &response[1],
+                                 &extra_length, (uint16_t)(capacity - 1U));
+    } else {
+        if (server->callbacks.read_dtc == NULL) {
+            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                     capacity);
+        }
+        result = server->callbacks.read_dtc(server->context, subfunction, request, request_len,
+                                            &response[1], &extra_length, (uint16_t)(capacity - 1U));
+    }
     if (result != UDS_RESULT_OK) {
         return callback_result(server, result, request, response, response_len, capacity);
     }
@@ -964,6 +1076,8 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
                                        capacity, now_ms);
     case 0x11U:
         return service_ecu_reset(server, request, request_len, response, response_len, capacity);
+    case 0x14U:
+        return service_clear_dtc(server, request, request_len, response, response_len, capacity);
     case 0x19U:
         return service_read_dtc(server, request, request_len, response, response_len, capacity);
     case 0x22U:
@@ -991,6 +1105,21 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
         return service_tester_present(request, request_len, response, response_len, capacity);
     case 0x85U:
         return service_dtc_setting(server, request, request_len, response, response_len, capacity);
+    case 0x23U:
+    case 0x24U:
+    case 0x29U:
+    case 0x2AU:
+    case 0x2CU:
+    case 0x2EU:
+    case 0x35U:
+    case 0x38U:
+    case 0x3DU:
+    case 0x83U:
+    case 0x84U:
+    case 0x86U:
+    case 0x87U:
+        return service_modular_backend(server, request, request_len, response, response_len,
+                                       capacity);
     default:
         return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
                                  capacity);

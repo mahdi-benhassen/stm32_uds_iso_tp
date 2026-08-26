@@ -14,6 +14,13 @@ set(UDS_ISO_TP_MAX_PAYLOAD 16384 CACHE STRING "Maximum bounded ISO-TP payload")
 
 add_library(uds_iso_tp_isotp STATIC src/isotp.c)
 target_include_directories(uds_iso_tp_isotp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+add_library(uds_iso_tp_crypto STATIC
+    crypto/aes.c
+    crypto/aes_cmac.c
+    crypto/uds_security_cmac.c)
+target_include_directories(uds_iso_tp_crypto PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
+target_compile_options(uds_iso_tp_crypto PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
 target_compile_definitions(uds_iso_tp_isotp PUBLIC ISOTP_MAX_PAYLOAD=${UDS_ISO_TP_MAX_PAYLOAD})
 target_compile_options(uds_iso_tp_isotp PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
 
@@ -21,7 +28,9 @@ add_library(uds_iso_tp_uds STATIC
     src/uds.c
     src/endpoint.c
     src/uds_did.c
-    src/uds_download.c)
+    src/uds_download.c
+    src/uds_dtc.c
+    src/uds_services.c)
 target_include_directories(uds_iso_tp_uds PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -34,7 +43,9 @@ if(UDS_ISO_TP_BUILD_PORTABILITY_CHECK)
         src/uds.c
         src/endpoint.c
         src/uds_did.c
-        src/uds_download.c)
+        src/uds_download.c
+        src/uds_dtc.c
+        src/uds_services.c)
     target_include_directories(uds_iso_tp_c99_portability PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/uds_iso_tp)
@@ -82,6 +93,16 @@ if(UDS_ISO_TP_BUILD_TESTS)
     target_link_libraries(uds_iso_tp_endpoint_test PRIVATE uds_iso_tp_uds)
     target_compile_options(uds_iso_tp_endpoint_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_endpoint_contract COMMAND uds_iso_tp_endpoint_test)
+
+    add_executable(uds_iso_tp_services_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_services.c)
+    target_include_directories(uds_iso_tp_services_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_services_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_services_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_services_contract
+             COMMAND uds_iso_tp_services_test)
 endif()
 
 if(UDS_ISO_TP_BUILD_EXAMPLES)
@@ -112,4 +133,24 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_c092_transport_contract
              COMMAND uds_iso_tp_c092_transport_test)
+
+    add_executable(uds_iso_tp_aes_cmac_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/crypto/test_aes_cmac.c)
+    target_include_directories(uds_iso_tp_aes_cmac_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
+    target_link_libraries(uds_iso_tp_aes_cmac_test PRIVATE uds_iso_tp_crypto)
+    target_compile_options(uds_iso_tp_aes_cmac_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_aes_cmac_contract
+             COMMAND uds_iso_tp_aes_cmac_test)
+
+    add_executable(uds_iso_tp_dtc_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/uds/test_dtc.c)
+    target_include_directories(uds_iso_tp_dtc_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_dtc_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_dtc_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_dtc_contract
+             COMMAND uds_iso_tp_dtc_test)
 endif()

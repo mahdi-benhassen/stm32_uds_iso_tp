@@ -227,12 +227,15 @@ typedef UdsCallbackResult (*UdsTransferExitFn)(void *context, const uint8_t *req
                                                uint16_t *response_len, uint16_t capacity);
 typedef UdsCallbackResult (*UdsResetFn)(void *context, uint8_t subfunction);
 typedef void (*UdsResetExecuteFn)(void *context, uint8_t subfunction);
+typedef struct UdsServiceBackends UdsServiceBackends;
+typedef UdsCallbackResult (*UdsClearDtcFn)(void *context, uint32_t group_of_dtc);
 typedef UdsCallbackResult (*UdsDtcSettingFn)(void *context, uint8_t subfunction);
 
 typedef struct {
     UdsReadDidFn read_did;
     UdsWriteDidFn write_did;
     UdsDtcFn read_dtc;
+    const UdsDtcBackend *dtc_backend;
     UdsSecuritySeedFn security_seed;
     UdsSecurityKeyFn security_key;
     UdsCommunicationControlFn communication_control;
@@ -244,6 +247,8 @@ typedef struct {
     UdsResetFn ecu_reset;
     UdsResetExecuteFn ecu_reset_execute;
     UdsDtcSettingFn control_dtc_setting;
+    UdsClearDtcFn clear_dtc;
+    const UdsServiceBackends *service_backends;
 } UdsCallbacks;
 
 typedef struct {
