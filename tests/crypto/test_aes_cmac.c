@@ -45,11 +45,37 @@ int main(void) {
     assert(memcmp(seed_mac, seed_expected, sizeof(seed_mac)) == 0);
     assert(uds_security_cmac_derive_key(key, seed, seed_mac));
     assert(memcmp(seed_mac, seed_expected, sizeof(seed_mac)) == 0);
+
+    static const uint8_t arbitrary_seed[7] = {0x01U, 0xA2U, 0x03U, 0xB4U, 0x05U, 0xC6U, 0x07U};
+    uint8_t arbitrary_expected[16];
+    uint8_t arbitrary_actual[16];
+    assert(aes_cmac_128(key, arbitrary_seed, sizeof(arbitrary_seed), arbitrary_expected));
+    assert(uds_security_cmac_derive_key_for_seed(key, arbitrary_seed, sizeof(arbitrary_seed),
+                                                 arbitrary_actual));
+    assert(memcmp(arbitrary_actual, arbitrary_expected, sizeof(arbitrary_actual)) == 0);
+
+    static const uint8_t zero_key[16] = {0U};
+    static const uint8_t zero_seed[16] = {0U};
+    assert(aes_cmac_128(zero_key, zero_seed, sizeof(zero_seed), arbitrary_expected));
+    assert(uds_security_cmac_derive_key_for_seed(zero_key, zero_seed, sizeof(zero_seed),
+                                                 arbitrary_actual));
+    assert(memcmp(arbitrary_actual, arbitrary_expected, sizeof(arbitrary_actual)) == 0);
+
+    static uint8_t maximum_seed[UDS_SECURITY_CMAC_MAX_SEED_LENGTH];
+    for (uint16_t index = 0U; index < sizeof(maximum_seed); ++index)
+        maximum_seed[index] = (uint8_t)(index * 13U + 7U);
+    assert(aes_cmac_128(key, maximum_seed, sizeof(maximum_seed), arbitrary_expected));
+    assert(uds_security_cmac_derive_key_for_seed(key, maximum_seed, sizeof(maximum_seed),
+                                                 arbitrary_actual));
+    assert(memcmp(arbitrary_actual, arbitrary_expected, sizeof(arbitrary_actual)) == 0);
+    assert(!uds_security_cmac_derive_key_for_seed(
+        key, maximum_seed, (uint16_t)(UDS_SECURITY_CMAC_MAX_SEED_LENGTH + 1U), arbitrary_actual));
     assert(uds_security_cmac_constant_time_equal(seed_mac, seed_expected));
     seed_mac[0] ^= 0x01U;
     assert(!uds_security_cmac_constant_time_equal(seed_mac, seed_expected));
     assert(uds_security_cmac_constant_time_equal(NULL, seed_expected) == false);
     assert(aes_cmac_128(NULL, seed, sizeof(seed), seed_mac) == false);
     assert(aes_cmac_128(key, NULL, 1U, seed_mac) == false);
+    assert(uds_security_cmac_derive_key_for_seed(key, NULL, 1U, seed_mac) == false);
     return 0;
 }

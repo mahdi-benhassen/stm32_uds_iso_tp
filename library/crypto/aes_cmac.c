@@ -4,6 +4,12 @@
 
 #include <string.h>
 
+static void secure_clear(void *data, size_t length) {
+    volatile uint8_t *bytes = (volatile uint8_t *)data;
+    while ((bytes != NULL) && (length-- != 0U))
+        *bytes++ = 0U;
+}
+
 static void xor_block(uint8_t destination[16], const uint8_t source[16]) {
     for (uint8_t index = 0U; index < 16U; ++index)
         destination[index] ^= source[index];
@@ -27,6 +33,8 @@ static void generate_subkey(const Aes128Context *aes, uint8_t output[16], bool s
     left_shift_block(output, intermediate);
     if (second)
         left_shift_block(output, output);
+    secure_clear(zero, sizeof(zero));
+    secure_clear(intermediate, sizeof(intermediate));
 }
 
 bool aes_cmac_128(const uint8_t key[AES_CMAC_128_KEY_SIZE], const uint8_t *message,
@@ -65,5 +73,11 @@ bool aes_cmac_128(const uint8_t key[AES_CMAC_128_KEY_SIZE], const uint8_t *messa
     }
     xor_block(last, state);
     aes128_encrypt_block(&aes, last, mac);
+    secure_clear(&aes, sizeof(aes));
+    secure_clear(k1, sizeof(k1));
+    secure_clear(k2, sizeof(k2));
+    secure_clear(state, sizeof(state));
+    secure_clear(block, sizeof(block));
+    secure_clear(last, sizeof(last));
     return true;
 }
