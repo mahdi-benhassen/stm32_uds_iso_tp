@@ -111,7 +111,6 @@ uint32_t uds_dtc_capability_for_subfunction(uint8_t subfunction) {
     case 0x0EU:
         return UDS_DTC_CAP_REPORT_MOST_RECENT_CONFIRMED;
     case 0x0FU:
-        return UDS_DTC_CAP_REPORT_MIRROR_EXTENDED_DATA;
     case 0x10U:
         return UDS_DTC_CAP_REPORT_MIRROR_EXTENDED_DATA;
     case 0x11U:

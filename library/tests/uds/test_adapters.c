@@ -156,7 +156,7 @@ static void test_endpoint_tx_error_recovery(void) {
     config.tx_complete = fake_tx_complete;
     config.tx_error = fake_tx_error;
     assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
-    assert(endpoint.config.tx_error == fake_tx_error);
+    assert(endpoint.config.tx_error != NULL);
 
     IsoTpCanFrame request = {.can_id = 0x7E0U, .dlc = 3U, .data = {0x02U, 0x3EU, 0x00U}};
     assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);

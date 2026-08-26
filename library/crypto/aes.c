@@ -63,7 +63,7 @@ static void shift_rows(uint8_t state[16]) {
 
 static void mix_columns(uint8_t state[16]) {
     for (uint8_t column = 0U; column < 4U; ++column) {
-        uint8_t *value = &state[column * 4U];
+        uint8_t *value = &state[(size_t)column * 4U];
         uint8_t sum = (uint8_t)(value[0] ^ value[1] ^ value[2] ^ value[3]);
         uint8_t first = value[0];
         value[0] ^= sum ^ xtime((uint8_t)(value[0] ^ value[1]));
@@ -117,7 +117,7 @@ void aes128_encrypt_block(const Aes128Context *context, const uint8_t input[16],
         sub_bytes(state);
         shift_rows(state);
         mix_columns(state);
-        add_round_key(state, &context->round_keys[round * 16U]);
+        add_round_key(state, &context->round_keys[(size_t)round * 16U]);
     }
     sub_bytes(state);
     shift_rows(state);
