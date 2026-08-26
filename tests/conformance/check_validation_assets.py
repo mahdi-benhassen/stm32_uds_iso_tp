@@ -47,6 +47,8 @@ def main() -> int:
         raise SystemExit(f"board profile missing required content: {missing}")
 
     c092_files = {
+        "uds_diagnostics.c",
+        "uds_diagnostics.h",
         "can_transport_fdcan.c",
         "can_transport_fdcan.h",
         "uds_app_config.h",
@@ -60,6 +62,7 @@ def main() -> int:
     if missing_files:
         raise SystemExit(f"C092 adapter missing required files: {missing_files}")
     c092_transport = (C092_DIR / "can_transport_fdcan.c").read_text(encoding="utf-8")
+    c092_diagnostics = (C092_DIR / "uds_diagnostics.h").read_text(encoding="utf-8") + (C092_DIR / "uds_diagnostics.c").read_text(encoding="utf-8")
     c092_app_header = (C092_DIR / "uds_app_fdcan.h").read_text(encoding="utf-8")
     c092_app_source = (C092_DIR / "uds_app_fdcan.c").read_text(encoding="utf-8")
     c092_profile = (C092_DIR / "uds_app_config.h").read_text(encoding="utf-8")
@@ -118,6 +121,25 @@ def main() -> int:
     app_source = (C092_DIR / "uds_app_fdcan.c").read_text(encoding="utf-8")
     if "uds_c092_fdcan_poll_tx_events(s_transport);" not in app_source:
         raise SystemExit("C092 application must poll stored TX events from mainline")
+    issue19_required_tokens = (
+        "UDS_C092_DIAG_BOOTING",
+        "UDS_C092_DIAG_READY",
+        "UDS_C092_DIAG_FAULT",
+        "UDS_C092_DIAGNOSTIC_BOOT_TRACE",
+        "uds_c092_diagnostic_is_ready",
+        "uds_c092_filter_accept",
+        "uds_c092_app_attach_diagnostics",
+    )
+    missing = [
+        token
+        for token in issue19_required_tokens
+        if token not in c092_diagnostics + c092_app_source + c092_app_header
+    ]
+    if missing:
+        raise SystemExit(f"Issue #19 readiness contract missing required content: {missing}")
+    for document in (ROOT / "docs/issue19_ecu_reset_recovery.md", ROOT / "docs/ecu_reset_timing.md"):
+        if not document.exists():
+            raise SystemExit(f"Issue #19 documentation missing: {document}")
 
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):

@@ -122,9 +122,17 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
     target_compile_options(uds_iso_tp_adapters_test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_adapters_contract COMMAND uds_iso_tp_adapters_test)
 
+    add_executable(uds_iso_tp_reset_recovery_test tests/uds/test_reset_recovery.c)
+    target_link_libraries(uds_iso_tp_reset_recovery_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_reset_recovery_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_reset_recovery_contract
+             COMMAND uds_iso_tp_reset_recovery_test)
+
     add_executable(uds_iso_tp_c092_transport_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_c092_transport_shim.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/can_transport_fdcan.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/can_transport_fdcan.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/uds_diagnostics.c)
     target_include_directories(uds_iso_tp_c092_transport_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/c092_shim
         ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092
@@ -133,6 +141,16 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_c092_transport_contract
              COMMAND uds_iso_tp_c092_transport_test)
+
+    add_executable(uds_iso_tp_c092_diagnostics_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_c092_diagnostics.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/uds_diagnostics.c)
+    target_include_directories(uds_iso_tp_c092_diagnostics_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092)
+    target_compile_options(uds_iso_tp_c092_diagnostics_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_c092_diagnostics_contract
+             COMMAND uds_iso_tp_c092_diagnostics_test)
 
     add_executable(uds_iso_tp_aes_cmac_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/crypto/test_aes_cmac.c)

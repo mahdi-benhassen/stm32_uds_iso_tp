@@ -63,6 +63,13 @@ void uds_c092_fdcan_transport_init(UdsC092FdcanTransport *transport, FDCAN_Handl
     transport->tx_complete = false;
     transport->tx_error = false;
     transport->tx_marker = UDS_C092_FDCAN_TX_MARKER;
+    transport->diagnostics = NULL;
+}
+
+void uds_c092_fdcan_attach_diagnostics(UdsC092FdcanTransport *transport,
+                                       UdsC092DiagnosticTrace *diagnostics) {
+    if (transport != NULL)
+        transport->diagnostics = diagnostics;
 }
 
 bool uds_c092_fdcan_send(void *context, const IsoTpCanFrame *frame) {
@@ -93,6 +100,7 @@ bool uds_c092_fdcan_send(void *context, const IsoTpCanFrame *frame) {
         transport->tx_error = true;
         return false;
     }
+    uds_c092_diagnostic_count_fdcan_tx(transport->diagnostics, HAL_GetTick());
     return true;
 }
 

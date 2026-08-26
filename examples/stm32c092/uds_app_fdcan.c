@@ -11,6 +11,7 @@ static UdsIsoTpEndpoint s_endpoint;
 static IsoTpCanFrame s_rx_frame;
 static volatile bool s_rx_pending;
 static bool s_initialized;
+static UdsC092DiagnosticTrace *s_diagnostics;
 
 void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
                        const UdsCallbacks *application_callbacks, void *uds_context,
@@ -42,20 +43,48 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     s_transport = transport;
     s_rx_pending = false;
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
+    if (s_diagnostics != NULL) {
+        uds_c092_fdcan_attach_diagnostics(transport, s_diagnostics);
+        if (s_initialized)
+            uds_c092_diagnostic_mark(s_diagnostics, UDS_C092_BOOT_UDS_INIT_DONE, now_ms);
+        else
+            uds_c092_diagnostic_fault(s_diagnostics, now_ms);
+    }
+}
+
+void uds_c092_app_attach_diagnostics(UdsC092DiagnosticTrace *trace) {
+    s_diagnostics = trace;
+}
+
+bool uds_c092_app_is_diagnostic_ready(void) {
+    return (s_diagnostics == NULL) || uds_c092_diagnostic_is_ready(s_diagnostics);
 }
 
 void uds_c092_app_init_default(UdsC092FdcanTransport *transport, uint32_t now_ms) {
     uds_c092_app_init(transport, now_ms, NULL, NULL, NULL, NULL);
 }
 
-void uds_c092_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc, bool is_fd,
-                              bool bit_rate_switch) {
+bool uds_c092_app_accept_rx(uint32_t can_id, bool is_fd, bool bit_rate_switch, bool is_extended_id,
+                            bool is_remote_frame) {
+    return uds_c092_filter_accept(can_id, UDS_C092_REQUEST_ID, UDS_C092_FUNCTIONAL_REQUEST_ID,
+                                  is_fd, bit_rate_switch, is_extended_id, is_remote_frame);
+}
+
+void uds_c092_app_rx_from_isr_ex(uint32_t can_id, const uint8_t *data, uint8_t dlc, bool is_fd,
+                                 bool bit_rate_switch, bool is_extended_id, bool is_remote_frame) {
     if (!s_initialized || (data == NULL) || (dlc == 0U) ||
         (dlc > (is_fd ? ISOTP_MAX_FRAME_DATA : 8U)) ||
-        ((can_id != UDS_C092_REQUEST_ID) && (can_id != UDS_C092_FUNCTIONAL_REQUEST_ID)))
+        !uds_c092_app_accept_rx(can_id, is_fd, bit_rate_switch, is_extended_id, is_remote_frame)) {
+        uds_c092_diagnostic_count_rx_reject(s_diagnostics);
         return;
+    }
+    if (!uds_c092_app_is_diagnostic_ready()) {
+        uds_c092_diagnostic_count_rx_drop(s_diagnostics);
+        return;
+    }
     if (s_rx_pending)
         return;
+    uds_c092_diagnostic_count_rx(s_diagnostics, uds_c092_fdcan_clock(s_transport));
     s_rx_frame.can_id = can_id;
     s_rx_frame.dlc = dlc;
     s_rx_frame.is_fd = is_fd;
@@ -64,8 +93,13 @@ void uds_c092_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc,
     s_rx_pending = true;
 }
 
+void uds_c092_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc, bool is_fd,
+                              bool bit_rate_switch) {
+    uds_c092_app_rx_from_isr_ex(can_id, data, dlc, is_fd, bit_rate_switch, false, false);
+}
+
 void uds_c092_app_process(uint32_t now_ms) {
-    if (!s_initialized || (s_transport == NULL))
+    if (!s_initialized || (s_transport == NULL) || !uds_c092_app_is_diagnostic_ready())
         return;
 
     IsoTpCanFrame frame = {0};
@@ -84,8 +118,16 @@ void uds_c092_app_process(uint32_t now_ms) {
     __enable_irq();
     if (tx_complete)
         uds_isotp_endpoint_tx_complete(&s_endpoint);
-    if (has_frame)
-        (void)uds_isotp_endpoint_receive(&s_endpoint, &frame, now_ms);
+    if (has_frame) {
+        IsoTpStatus receive_status = uds_isotp_endpoint_receive(&s_endpoint, &frame, now_ms);
+        if (receive_status != ISOTP_ERR_ARGUMENT)
+            uds_c092_diagnostic_count_isotp_rx(s_diagnostics);
+        if (receive_status == ISOTP_COMPLETE) {
+            uds_c092_diagnostic_count_uds_request(s_diagnostics, now_ms);
+            if (s_endpoint.tx_pending || s_endpoint.queued_response_pending)
+                uds_c092_diagnostic_count_uds_response(s_diagnostics);
+        }
+    }
     (void)uds_isotp_endpoint_process(&s_endpoint, now_ms);
     (void)uds_isotp_endpoint_tick(&s_endpoint, now_ms);
 }
