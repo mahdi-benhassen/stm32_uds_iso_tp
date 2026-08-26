@@ -53,6 +53,7 @@ int main(void) {
     IsoTpCanFrame frame = {.can_id = 0x7E8U, .dlc = 3U, .data = {0x02U, 0x3EU, 0x00U}};
 
     uds_c092_fdcan_transport_init(&transport, &hfdcan, 0x7E0U, 0x7E8U);
+    assert(!uds_c092_fdcan_tx_complete(&transport));
     assert(uds_c092_fdcan_send(&transport, &frame));
     assert(last_header.MessageMarker == transport.tx_marker);
     uint32_t first_marker = transport.tx_marker;
@@ -60,7 +61,7 @@ int main(void) {
     assert(!uds_c092_fdcan_tx_complete(&transport));
 
     push_event(first_marker, FDCAN_TX_EVENT);
-    uds_c092_fdcan_poll_tx_events(&transport);
+    uds_c092_fdcan_on_tx_event(&transport, FDCAN_IT_TX_EVT_FIFO_NEW_DATA);
     assert(uds_c092_fdcan_tx_complete(&transport));
     clear_events();
 
@@ -86,8 +87,18 @@ int main(void) {
     enqueue_status = HAL_ERROR;
     assert(!uds_c092_fdcan_send(&transport, &frame));
     assert(transport.tx_error);
+    assert(!uds_c092_fdcan_tx_complete(&transport));
     enqueue_status = HAL_OK;
     assert(uds_c092_fdcan_send(&transport, &frame));
     assert(!transport.tx_error);
+    uint32_t recovered_marker = transport.tx_marker;
+    push_event(recovered_marker, FDCAN_TX_EVENT);
+    uds_c092_fdcan_on_tx_event(&transport, FDCAN_IT_TX_EVT_FIFO_NEW_DATA);
+    assert(uds_c092_fdcan_tx_complete(&transport));
+
+    assert(uds_c092_fdcan_send(&transport, &frame));
+    uds_c092_fdcan_on_tx_event(&transport, FDCAN_IT_TX_EVT_FIFO_FULL);
+    assert(!transport.tx_pending && transport.tx_error);
+    assert(!uds_c092_fdcan_tx_complete(&transport));
     return 0;
 }

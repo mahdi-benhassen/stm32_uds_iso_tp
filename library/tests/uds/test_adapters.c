@@ -11,6 +11,7 @@ typedef struct {
     IsoTpCanFrame frames[8];
     uint8_t frame_count;
     bool fail_send;
+    bool tx_error;
 } FakeBus;
 
 static bool fake_classic_send(void *context, uint32_t can_id, const uint8_t *data, uint8_t dlc) {
@@ -43,6 +44,20 @@ static bool fake_fd_send(void *context, uint32_t can_id, const uint8_t *data, ui
 static uint32_t fake_clock(void *context) {
     (void)context;
     return 0U;
+}
+
+static bool fake_tx_complete(void *context) {
+    (void)context;
+    return false;
+}
+
+static bool fake_tx_error(void *context) {
+    Stm32F767BxCanBinding *binding = (Stm32F767BxCanBinding *)context;
+    FakeBus *bus = (binding != NULL) ? (FakeBus *)binding->context : NULL;
+    if ((bus == NULL) || !bus->tx_error)
+        return false;
+    bus->tx_error = false;
+    return true;
 }
 
 static UdsCallbackResult read_did(void *context, uint16_t did, uint8_t *data, uint16_t *length,
@@ -129,6 +144,51 @@ static void test_classic_multiframe_sequence(void) {
     assert(bus.frame_count == 2U && (bus.frames[1].data[0] >> 4U) == 2U);
 }
 
+static void test_endpoint_tx_error_recovery(void) {
+    FakeBus bus = {0};
+    Stm32F767BxCanBinding binding = {
+        .send_classic = fake_classic_send, .now_ms = fake_clock, .context = &bus};
+    UdsCallbacks callbacks = {0};
+    callbacks.read_did = read_did;
+    UdsIsoTpEndpointConfig config = {0};
+    UdsIsoTpEndpoint endpoint;
+    configure_bxcan(&config, &binding, &callbacks);
+    config.tx_complete = fake_tx_complete;
+    config.tx_error = fake_tx_error;
+    assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
+    assert(endpoint.config.tx_error == fake_tx_error);
+
+    IsoTpCanFrame request = {.can_id = 0x7E0U, .dlc = 3U, .data = {0x02U, 0x3EU, 0x00U}};
+    assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
+    assert(endpoint.tx_in_flight);
+    bus.tx_error = true;
+    assert(uds_isotp_endpoint_process(&endpoint, 1U) == ISOTP_ERR_STATE);
+    assert(!endpoint.tx_in_flight);
+
+    bus.frame_count = 0U;
+    assert(uds_isotp_endpoint_receive(&endpoint, &request, 2U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&endpoint, 2U) == ISOTP_TX_FRAME_READY);
+    assert(bus.frame_count == 1U);
+
+    bus.tx_error = true;
+    assert(uds_isotp_endpoint_process(&endpoint, 3U) == ISOTP_ERR_STATE);
+    assert(!endpoint.tx_in_flight);
+    bus.frame_count = 0U;
+    IsoTpCanFrame multi_frame_request = {
+        .can_id = 0x7E0U, .dlc = 4U, .data = {0x03U, 0x22U, 0xF1U, 0x90U}};
+    assert(uds_isotp_endpoint_receive(&endpoint, &multi_frame_request, 4U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&endpoint, 4U) == ISOTP_TX_FRAME_READY);
+    assert(bus.frame_count == 1U && (bus.frames[0].data[0] >> 4U) == 1U);
+    bus.tx_error = true;
+    assert(uds_isotp_endpoint_process(&endpoint, 5U) == ISOTP_ERR_STATE);
+    assert(!endpoint.tx_in_flight);
+    bus.frame_count = 0U;
+    assert(uds_isotp_endpoint_receive(&endpoint, &request, 6U) == ISOTP_TX_FRAME_READY);
+    assert(uds_isotp_endpoint_process(&endpoint, 6U) == ISOTP_TX_FRAME_READY);
+    assert(bus.frame_count == 1U);
+}
+
 static void test_repeated_classic_requests(void) {
     FakeBus bus = {0};
     Stm32F767BxCanBinding binding = {
@@ -192,6 +252,7 @@ int main(void) {
     test_classic_send();
     test_classic_send_failure_retries();
     test_classic_multiframe_sequence();
+    test_endpoint_tx_error_recovery();
     test_repeated_classic_requests();
     test_ecu_reset_response_and_exactly_once_execution();
     test_fd();
