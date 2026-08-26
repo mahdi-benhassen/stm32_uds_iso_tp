@@ -87,6 +87,8 @@ if (HAL_FDCAN_ActivateNotification(
 
 The generated `HAL_FDCAN_RxFifo0Callback()` should read the header/data with `HAL_FDCAN_GetRxMessage()`, convert `rx_header.DataLength` with `uds_c092_fdcan_data_length_bytes()`, and call `uds_c092_app_rx_from_isr()` with the identifier, byte length, Classic/FD format, and BRS state. The generated `HAL_FDCAN_TxEventFifoCallback()` should call `uds_c092_fdcan_on_tx_event()` as shown above. Keep both ISRs limited to draining/capturing the frame and setting the bounded handoff; do not run UDS dispatch, Flash operations, reset handling, or waits from the ISR. Mainline code must call `uds_c092_app_process(uds_c092_platform_now_ms())`.
 
+A generated project can compile and still omit this runtime contract. Before flashing a generated C092 project, run `python3 tests/conformance/check_c092_generated_integration.py <project-root>`. The checker rejects the stale pattern found in the Issue #19 reporter archive: no application-owned `HAL_FDCAN_TxEventFifoCallback()`, no TX-event forwarding, no readiness attachment/mark, raw RX `DataLength`, the compatibility RX wrapper, broad range filtering, or `FDCAN_NO_TX_EVENTS`. These are integration-source checks; they do not replace a physical CAN trace.
+
 The optional reset-event callback receives `UDS_RESET_EVENT_REQUESTED`, `UDS_RESET_EVENT_RESPONSE_READY`, `UDS_RESET_EVENT_TX_SUBMITTED`, `UDS_RESET_EVENT_TX_COMPLETE`, and `UDS_RESET_EVENT_EXECUTED`. Use it for timestamped diagnostics during HIL only; it is `NULL` and zero-cost at the endpoint boundary when not configured. The adapter’s built-in ECUReset prepare/execute callbacks remain application-owned at the C092 boundary and do not require a separately declared `application_callbacks` object.
 
 ## FDCAN adapter requirements

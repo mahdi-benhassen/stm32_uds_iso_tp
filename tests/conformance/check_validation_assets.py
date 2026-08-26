@@ -137,9 +137,14 @@ def main() -> int:
     ]
     if missing:
         raise SystemExit(f"Issue #19 readiness contract missing required content: {missing}")
-    for document in (ROOT / "docs/issue19_ecu_reset_recovery.md", ROOT / "docs/ecu_reset_timing.md"):
+    for document in (
+        ROOT / "docs/issue19_ecu_reset_recovery.md",
+        ROOT / "docs/ecu_reset_timing.md",
+        ROOT / "docs/issue19_reporter_differential.md",
+        ROOT / "tests/conformance/check_c092_generated_integration.py",
+    ):
         if not document.exists():
-            raise SystemExit(f"Issue #19 documentation missing: {document}")
+            raise SystemExit(f"Issue #19 documentation/checker missing: {document}")
 
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):
