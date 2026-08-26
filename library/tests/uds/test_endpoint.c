@@ -205,7 +205,7 @@ static void test_deferred_reset_and_full_duplex(void) {
     assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_TX_FRAME_READY);
     assert(reset_sink.count == 2U && reset_sink.frames[1].data[0] == 0x03U &&
            reset_sink.frames[1].data[1] == 0x7FU && reset_sink.frames[1].data[2] == 0x11U &&
-           reset_sink.frames[1].data[3] == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+           reset_sink.frames[1].data[3] == UDS_NRC_REQUEST_OUT_OF_RANGE);
     assert(reset_sink.reset_calls == 1U);
 
     reset_request.data[1] = 0x11U;

@@ -209,6 +209,8 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
     switch (result) {
     case UDS_RESULT_NOT_SUPPORTED:
         return UDS_NRC_SERVICE_NOT_SUPPORTED;
+    case UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED:
+        return UDS_NRC_SUBFUNCTION_NOT_SUPPORTED;
     case UDS_RESULT_DENIED:
         return UDS_NRC_CONDITIONS_NOT_CORRECT;
     case UDS_RESULT_OUT_OF_RANGE:
@@ -438,7 +440,9 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
                                  response, response_len, capacity);
     }
     uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
-    if ((subfunction != 0x01U) || (server->callbacks.ecu_reset == NULL)) {
+    if ((subfunction < UDS_RESET_TYPE_HARD) ||
+        (subfunction > UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN) ||
+        (server->callbacks.ecu_reset == NULL)) {
         return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
                                  capacity);
     }

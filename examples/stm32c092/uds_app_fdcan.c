@@ -12,16 +12,6 @@ static IsoTpCanFrame s_rx_frame;
 static volatile bool s_rx_pending;
 static bool s_initialized;
 
-static UdsCallbackResult uds_c092_ecu_reset_prepare(void *context, uint8_t subfunction) {
-    (void)context;
-    return (subfunction == 0x01U) ? UDS_RESULT_OK : UDS_RESULT_OUT_OF_RANGE;
-}
-
-static void uds_c092_ecu_reset_execute(void *context, uint8_t subfunction) {
-    (void)context;
-    uds_c092_platform_system_reset(subfunction);
-}
-
 void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
                        const UdsCallbacks *application_callbacks, void *uds_context,
                        UdsIsoTpResetEventFn reset_event, void *reset_event_context) {
@@ -87,6 +77,7 @@ void uds_c092_app_process(uint32_t now_ms) {
     }
     __enable_irq();
 
+    uds_c092_fdcan_poll_tx_events(s_transport);
     if (uds_c092_fdcan_tx_complete(s_transport))
         uds_isotp_endpoint_tx_complete(&s_endpoint);
     if (has_frame)

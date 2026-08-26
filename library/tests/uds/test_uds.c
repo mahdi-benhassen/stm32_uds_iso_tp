@@ -46,9 +46,15 @@ static UdsCallbackResult security_key(void *context, uint8_t level, const uint8_
     return ((key[0] == 0xCAU) && (key[1] == 0xFEU)) ? UDS_RESULT_OK : UDS_RESULT_INVALID_KEY;
 }
 
+static uint16_t ecu_reset_calls;
+
 static UdsCallbackResult ecu_reset(void *context, uint8_t subfunction) {
     (void)context;
-    return (subfunction == 1U) ? UDS_RESULT_OK : UDS_RESULT_OUT_OF_RANGE;
+    ++ecu_reset_calls;
+    return ((subfunction >= UDS_RESET_TYPE_HARD) &&
+            (subfunction <= UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN))
+               ? UDS_RESULT_OK
+               : UDS_RESULT_OUT_OF_RANGE;
 }
 
 static UdsCallbackResult communication_control(void *context, uint8_t subfunction,
@@ -289,6 +295,34 @@ static void test_uds(void) {
     assert(uds_server_complete_reset(&server) == UDS_RESULT_NOT_SUPPORTED);
     uds_server_clear_reset(&server);
     assert(!uds_server_reset_pending(&server));
+
+    for (uint8_t reset_type = UDS_RESET_TYPE_HARD;
+         reset_type <= UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN; ++reset_type) {
+        reset_request[1] = reset_type;
+        assert(uds_server_handle(&server, reset_request, sizeof(reset_request), response,
+                                 &response_len, sizeof(response),
+                                 20U + reset_type) == UDS_RESULT_OK);
+        assert(response_len == 2U && response[0] == 0x51U && response[1] == reset_type);
+        assert(uds_server_reset_pending(&server));
+        uds_server_clear_reset(&server);
+    }
+    uint16_t calls_before_suppressed = ecu_reset_calls;
+    for (uint8_t reset_type = UDS_RESET_TYPE_HARD;
+         reset_type <= UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN; ++reset_type) {
+        reset_request[1] = (uint8_t)(reset_type | UDS_SUPPRESS_POSITIVE_RESPONSE);
+        response_len = 0U;
+        assert(uds_server_handle(&server, reset_request, sizeof(reset_request), response,
+                                 &response_len, sizeof(response),
+                                 40U + reset_type) == UDS_RESULT_NO_RESPONSE);
+        assert(uds_server_reset_pending(&server));
+        assert(ecu_reset_calls == (uint16_t)(calls_before_suppressed + reset_type));
+        uds_server_clear_reset(&server);
+    }
+    reset_request[1] = 0x06U;
+    assert(uds_server_handle(&server, reset_request, sizeof(reset_request), response, &response_len,
+                             sizeof(response), 26U) == UDS_RESULT_OK);
+    assert(response_len == 3U && response[0] == 0x7FU && response[1] == 0x11U &&
+           response[2] == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
 
     uint8_t communication_request[] = {0x28U, 0x00U, 0x01U};
     assert(uds_server_handle(&server, communication_request, sizeof(communication_request),

@@ -173,9 +173,18 @@ typedef enum {
 typedef enum { UDS_RESET_NORMAL = 0, UDS_RESET_PROGRAMMING } UdsResetReason;
 
 typedef enum {
+    UDS_RESET_TYPE_HARD = 0x01U,
+    UDS_RESET_TYPE_KEY_OFF_ON = 0x02U,
+    UDS_RESET_TYPE_SOFT = 0x03U,
+    UDS_RESET_TYPE_ENABLE_RAPID_POWER_SHUTDOWN = 0x04U,
+    UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN = 0x05U
+} UdsResetType;
+
+typedef enum {
     UDS_RESULT_OK = 0,
     UDS_RESULT_NO_RESPONSE,
     UDS_RESULT_NOT_SUPPORTED,
+    UDS_RESULT_SUBFUNCTION_NOT_SUPPORTED,
     UDS_RESULT_DENIED,
     UDS_RESULT_OUT_OF_RANGE,
     UDS_RESULT_BUSY,
@@ -195,6 +204,7 @@ typedef UdsCallbackResult (*UdsWriteDidFn)(void *context, uint16_t did, const ui
 typedef UdsCallbackResult (*UdsDtcFn)(void *context, uint8_t subfunction, const uint8_t *request,
                                       uint16_t request_len, uint8_t *response,
                                       uint16_t *response_len, uint16_t capacity);
+typedef struct UdsDtcBackend UdsDtcBackend;
 typedef UdsCallbackResult (*UdsSecuritySeedFn)(void *context, uint8_t level, uint8_t *seed,
                                                uint16_t *length, uint16_t capacity);
 typedef UdsCallbackResult (*UdsSecurityKeyFn)(void *context, uint8_t level, const uint8_t *key,
