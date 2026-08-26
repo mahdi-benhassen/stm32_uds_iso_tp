@@ -204,7 +204,11 @@ def run_reset_campaign(cycles: int, requests_per_cycle: int, first_delay_us: int
 
 
 def run_ctest(ctest_dir: Path) -> None:
-    pattern = "uds_iso_tp_c092_immediate_reset_rx_contract|uds_iso_tp_reset_recovery_contract"
+    pattern = (
+        "uds_iso_tp_c092_immediate_reset_rx_contract|"
+        "uds_iso_tp_reset_recovery_contract|"
+        "uds_iso_tp_ecu_reset_transaction_lifecycle"
+    )
     subprocess.run(
         ["ctest", "--test-dir", str(ctest_dir), "-R", pattern, "--output-on-failure"],
         check=True,

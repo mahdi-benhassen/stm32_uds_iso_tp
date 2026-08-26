@@ -76,7 +76,7 @@ jobs:
       - name: CTest
         run: ctest --test-dir build/standalone --output-on-failure
       - name: C092 immediate ECUReset recovery regression
-        run: ctest --test-dir build/standalone -R 'uds_iso_tp_c092_immediate_reset_rx_contract|uds_iso_tp_reset_recovery_contract' --output-on-failure
+        run: ctest --test-dir build/standalone -R 'uds_iso_tp_c092_immediate_reset_rx_contract|uds_iso_tp_reset_recovery_contract|uds_iso_tp_ecu_reset_transaction_lifecycle' --output-on-failure
       - name: C092 mock-hardware reset campaign
         run: |
           python3 -m py_compile tests/standalone/run_c092_mock_hardware.py
