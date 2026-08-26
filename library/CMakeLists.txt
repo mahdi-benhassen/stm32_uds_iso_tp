@@ -129,6 +129,13 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
     add_test(NAME uds_iso_tp_reset_recovery_contract
              COMMAND uds_iso_tp_reset_recovery_test)
 
+    add_executable(uds_iso_tp_ecu_reset_lifecycle_test tests/uds/test_ecu_reset_lifecycle.c)
+    target_link_libraries(uds_iso_tp_ecu_reset_lifecycle_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_ecu_reset_lifecycle_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_ecu_reset_transaction_lifecycle
+             COMMAND uds_iso_tp_ecu_reset_lifecycle_test)
+
     add_executable(uds_iso_tp_c092_transport_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_c092_transport_shim.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/can_transport_fdcan.c

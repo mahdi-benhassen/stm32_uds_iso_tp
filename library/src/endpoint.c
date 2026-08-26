@@ -83,6 +83,7 @@ static void complete_in_flight(UdsIsoTpEndpoint *endpoint) {
     }
     endpoint->in_flight_final = false;
     endpoint->in_flight_reset_completion = false;
+    endpoint->tx_reset_completion = false;
 }
 
 bool uds_isotp_endpoint_init(UdsIsoTpEndpoint *endpoint, const UdsIsoTpEndpointConfig *config,

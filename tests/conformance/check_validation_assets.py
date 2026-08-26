@@ -106,6 +106,11 @@ def main() -> int:
         raise SystemExit("Issue #13 bxCAN path must not introduce an artificial delay")
 
     endpoint_source = (ROOT / "library/src/endpoint.c").read_text(encoding="utf-8")
+    lifecycle_test = (ROOT / "library/tests/uds/test_ecu_reset_lifecycle.c").read_text(encoding="utf-8")
+    if "endpoint->tx_reset_completion = false;" not in endpoint_source:
+        raise SystemExit("endpoint must clear reset-completion state after successful TX completion")
+    if "test_ecu_reset_transaction_lifecycle" not in lifecycle_test:
+        raise SystemExit("generic ECUReset lifecycle regression is missing")
     c092_header = (C092_DIR / "can_transport_fdcan.h").read_text(encoding="utf-8")
     c092_source = c092_transport
     if ("tx_pending" not in endpoint_source) or ("uds_server_complete_reset" not in endpoint_source):
@@ -154,6 +159,8 @@ def main() -> int:
         ROOT / "docs/issue19_reporter_differential.md",
         ROOT / "tests/conformance/check_c092_generated_integration.py",
         ROOT / "tests/standalone/run_c092_mock_hardware.py",
+        ROOT / "docs/issue19_uds_lifecycle.md",
+        ROOT / "library/tests/uds/test_ecu_reset_lifecycle.c",
     ):
         if not document.exists():
             raise SystemExit(f"Issue #19 documentation/checker missing: {document}")
