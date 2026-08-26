@@ -1,34 +1,40 @@
 # UDS Service Matrix
 
-This matrix distinguishes what the generic library can parse and route from what requires an application backend and what requires target hardware evidence. “Backend contract” means the API boundary exists and the dispatcher enforces bounded invocation; it does not mean a device implementation is supplied.
+This matrix separates generic protocol behavior from application backend availability and validation evidence. **Target Build** means the STM32F767 ARM GCC firmware build unless otherwise stated; it does not mean Keil Arm Compiler 6. **HIL** is marked only when physical evidence exists.
 
-| SID | Service | Generic protocol path | Backend/configuration status | Hardware/HIL status |
-|---:|---|---|---|---|
-| `0x10` | DiagnosticSessionControl | Implemented with session transitions and timing state | No device backend required for core behavior | Not run on target |
-| `0x11` | ECUReset | Implemented for reset types `0x01`–`0x05`, deferred completion | C092 policy supports `0x01` and `0x03`; application owns execution | HIL reset not run |
-| `0x14` | ClearDiagnosticInformation | Implemented length check and positive/NRC path | `UdsClearDtcFn` required; no storage bundled | Not run on target |
-| `0x19` | ReadDTCInformation | Subfunction/length/capability validation and legacy-compatible dispatch | `UdsDtcBackend` required for structured reporting; no records bundled | Not run on target |
-| `0x22` | ReadDataByIdentifier | Implemented through DID callback/registry | Application DID data required | Not run on target |
-| `0x23` | ReadMemoryByAddress | Modular backend route | Memory backend and secure-region preflight required | Not run on target |
-| `0x24` | ReadScalingDataByIdentifier | Modular backend route | DID-extension backend required | Not run on target |
-| `0x27` | SecurityAccess | Implemented callback-driven seed/key state and lockout | AES-CMAC helper available; algorithm and secret remain application-owned | Not run on target |
-| `0x28` | CommunicationControl | Implemented through callback | Application controls communications | Not run on target |
-| `0x29` | Authentication | Modular backend route | Authentication backend required | Not run on target |
-| `0x2A` | ReadDataByPeriodicIdentifier | Modular backend route | Bounded periodic/event backend required; no queue is hidden in library | Not run on target |
-| `0x2C` | DynamicallyDefineDataIdentifier | Modular backend route | DID-extension backend required | Not run on target |
-| `0x2E` | WriteDataByIdentifier | Modular backend route | Existing DID write/data policy must be supplied by application integration | Not run on target |
-| `0x31` | RoutineControl | Implemented through routine callback | Application routine registry required | Not run on target |
-| `0x34` | RequestDownload | Implemented with bounded download state | Application validates address/length and supplies block policy | Not run on target |
-| `0x35` | RequestUpload | Modular backend route | Transfer-extension backend required | Not run on target |
-| `0x36` | TransferData | Implemented for active download state | Application transfer callback required | Not run on target |
-| `0x37` | RequestTransferExit | Implemented for active download state | Application exit callback required | Not run on target |
-| `0x38` | RequestFileTransfer | Modular backend route | Transfer-extension backend required | Not run on target |
-| `0x3D` | WriteMemoryByAddress | Modular backend route | Memory backend and secure-region preflight required | Not run on target |
-| `0x3E` | TesterPresent | Implemented, including suppress-positive-response | No device backend required for core response | Not run on target |
-| `0x83` | AccessTimingParameter | Modular backend route | Timing backend required | Not run on target |
-| `0x84` | SecuredDataTransmission | Modular backend route | Secured-data backend and product cryptographic policy required | Not run on target |
-| `0x85` | ControlDTCSetting | Implemented through callback | Application DTC-setting policy required | Not run on target |
-| `0x86` | ResponseOnEvent | Modular backend route | Bounded periodic/event backend required | Not run on target |
-| `0x87` | LinkControl | Modular backend route | Link-control backend required | Not run on target |
+| SID | Service | Parser | Validation | Backend | Reference Backend | Unit Test | Integration Test | Target Build | HIL | Production Status |
+|---:|---|---|---|---|---|---|---|---|---|---|
+| `0x10` | DiagnosticSessionControl | Implemented | Length, subfunction, session transition | Not required for core | None | Pass | Endpoint coverage | Pass ARM GCC | Not executed | IMPLEMENTED |
+| `0x11` | ECUReset | Implemented | Five types, suppress bit, deferred completion | Platform executor required | C092 hard/soft policy only | Pass | Endpoint ordering coverage | Pass ARM GCC | Not executed | PROTOCOL ONLY |
+| `0x14` | ClearDiagnosticInformation | Implemented | Exact length, group range delegated | `UdsClearDtcFn` required | DTC fixture clear-all | Pass | DTC clear/read sequence | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x19` | ReadDTCInformation | Partial generic parser | Subfunction/length/capability | `UdsDtcBackend` required | Deterministic three-record fixture | Pass | Fixture filter/snapshot/extended/clear sequence | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x22` | ReadDataByIdentifier | Implemented | DID and response bounds delegated | DID read callback required | Test DID callback | Pass | Endpoint DID/multi-frame coverage | Pass ARM GCC | Not executed | IMPLEMENTED |
+| `0x23` | ReadMemoryByAddress | Backend-pass-through parser | Common session gate and optional memory preflight; address/size semantics backend-owned | Memory backend required | None | Selector/preflight only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x24` | ReadScalingDataByIdentifier | Backend-pass-through parser | Common session/address gate | DID extension backend required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x27` | SecurityAccess | Implemented | Level, sequence, seed lifetime, attempts, lockout | Seed/key callbacks required | Reference provider and CMAC helper | Pass | Session/lockout/endpoint coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x28` | CommunicationControl | Implemented | Length, subfunction, callback result, suppress bit | Communication callback required | Test callback | Pass | Endpoint callback coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x29` | Authentication | Backend-pass-through parser | Common session/address gate only | Authentication state machine required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x2A` | ReadDataByPeriodicIdentifier | Backend-pass-through parser | Common gate and nonzero queue bound | Bounded scheduler required | None | Selector/preflight only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x2C` | DynamicallyDefineDataIdentifier | Backend-pass-through parser | Common session/address gate only | DID dynamic registry required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x2E` | WriteDataByIdentifier | Backend-pass-through parser | Common session/address gate only | DID write descriptors required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x31` | RoutineControl | Implemented | Length, routine ID, response bounds | Routine callback required | Test callback | Pass | Endpoint coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x34` | RequestDownload | Implemented | Address/length encoding, block bound, session | Download callback required | Test callback | Pass | ISO-TP multi-frame coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x35` | RequestUpload | Backend-pass-through parser | Common programming/physical gate only | Transfer backend required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x36` | TransferData | Implemented for download | Active transfer, block counter, size, callback | Transfer callback required | Test callback | Pass | Multi-frame sequence coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x37` | RequestTransferExit | Implemented for download | Active transfer and response bounds | Transfer-exit callback required | Test callback | Pass | Transfer sequence coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x38` | RequestFileTransfer | Backend-pass-through parser | Common programming/physical gate only | File-transfer backend required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x3D` | WriteMemoryByAddress | Backend-pass-through parser | Common programming/physical gate and optional memory preflight | Memory backend required | None | Selector/preflight only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x3E` | TesterPresent | Implemented | Exact length, subfunction, suppress bit | Not required | None | Pass | 1,000-request regression | Pass ARM GCC | Not executed | IMPLEMENTED |
+| `0x83` | AccessTimingParameter | Backend-pass-through parser | Common physical/session gate | Timing backend required; bounds backend-owned | Test timing callback | Selector/route pass | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x84` | SecuredDataTransmission | Backend-pass-through parser | Common physical/session gate only | Secured-data semantics required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x85` | ControlDTCSetting | Implemented | Length, subfunction, suppress bit | DTC-setting callback required | Test callback | Pass | Endpoint callback coverage | Pass ARM GCC | Not executed | BACKEND REQUIRED |
+| `0x86` | ResponseOnEvent | Backend-pass-through parser | Common physical/session gate and nonzero queue bound | Bounded event registry required | None | Selector/preflight only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
+| `0x87` | LinkControl | Backend-pass-through parser | Common physical/session gate only | Physical link-control backend required | None | Selector only | Not complete | Source-integrated | Not executed | PROTOCOL ONLY |
 
-The project intentionally does not claim that “all 27 services” are device-complete merely because their identifiers are recognized. The generic architecture supplies stable, bounded integration seams for the service families whose semantics depend on the ECU product. Unsupported or unconfigured groups return a negative response rather than silently pretending to operate.
+## Status definitions
+
+**IMPLEMENTED** means generic protocol behavior is implemented and host/integration tests cover the stated boundary. **BACKEND REQUIRED** means generic handling exists but application callbacks or data policy are necessary for useful operation. **PROTOCOL ONLY** means the current implementation provides routing and/or an integration contract but not the service-specific parser/state machine requested by the review prompt. **IMPLEMENTED + HIL VERIFIED** is intentionally unused because no physical HIL evidence exists.
+
+## References
+
+[1]: https://uds.readthedocs.io/en/latest/pages/user_guide/message_translation.html#readdtcinformation "py-uds ReadDTCInformation service translation documentation"
