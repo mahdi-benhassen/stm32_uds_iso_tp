@@ -2,7 +2,7 @@
 
 **Repository:** `mahdi-benhassen/stm32_uds_iso_tp`
 **Reviewed branch:** `main`
-**Latest local implementation revision:** `ad7bbb3`
+**Latest local implementation revision:** `9954ccf`
 **Target:** STM32C092 + FDCAN + external CAN transceiver + Keil MDK / Arm Compiler 6
 **Audit date:** 2026-08-26
 

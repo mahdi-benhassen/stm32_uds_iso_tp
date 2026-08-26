@@ -1,7 +1,7 @@
 # Issues #13–#18 Final Review Status
 
 **Repository:** `mahdi-benhassen/stm32_uds_iso_tp`
-**Revision reviewed:** `ad7bbb3`
+**Revision reviewed:** `9954ccf`
 **Target:** STM32C092 + FDCAN + external transceiver + Keil MDK / Arm Compiler 6
 
 The latest review does **not** mark all issues fixed. The implementation now has stronger host-side contracts and a deterministic DTC fixture, but Keil compilation, flashing, real C092 traffic, and physical HIL evidence are unavailable in this environment.
