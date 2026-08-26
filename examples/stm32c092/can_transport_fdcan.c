@@ -108,9 +108,24 @@ bool uds_c092_fdcan_tx_complete(void *context) {
         transport->tx_complete = false;
         return true;
     }
+    return false;
+}
+
+bool uds_c092_fdcan_tx_error(void *context) {
+    UdsC092FdcanTransport *transport = (UdsC092FdcanTransport *)context;
+    if ((transport == NULL) || (transport->hfdcan == NULL) || !transport->tx_error)
+        return false;
+    transport->tx_error = false;
+    transport->tx_complete = false;
+    transport->tx_pending = false;
     return true;
 }
 
+/*
+ * The ISR and mainline fallback must not drain the HAL FIFO concurrently. The
+ * application integration serializes them by polling with the TX-event IRQ
+ * masked; a direct caller must provide the equivalent critical section.
+ */
 static void drain_tx_events(UdsC092FdcanTransport *transport, bool fifo_error) {
     FDCAN_TxEventFifoTypeDef event = {0};
     while (HAL_FDCAN_GetTxEvent(transport->hfdcan, &event) == HAL_OK) {

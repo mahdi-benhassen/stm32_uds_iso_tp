@@ -9,6 +9,7 @@
 
 typedef bool (*UdsIsoTpSendFrameFn)(void *context, const IsoTpCanFrame *frame);
 typedef bool (*UdsIsoTpTxCompleteFn)(void *context);
+typedef bool (*UdsIsoTpTxErrorFn)(void *context);
 typedef uint32_t (*UdsIsoTpClockFn)(void *context);
 typedef enum {
     UDS_RESET_EVENT_REQUESTED = 0,
@@ -22,6 +23,7 @@ typedef void (*UdsIsoTpResetEventFn)(void *context, UdsResetEvent event);
 typedef struct {
     UdsIsoTpSendFrameFn send_frame;
     UdsIsoTpTxCompleteFn tx_complete;
+    UdsIsoTpTxErrorFn tx_error;
     UdsIsoTpClockFn clock_ms;
     UdsIsoTpResetEventFn reset_event;
     void *context;

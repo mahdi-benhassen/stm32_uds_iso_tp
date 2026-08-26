@@ -58,6 +58,20 @@ static IsoTpStatus submit_control(UdsIsoTpEndpoint *endpoint) {
     return ISOTP_TX_FRAME_READY;
 }
 
+static void abort_in_flight(UdsIsoTpEndpoint *endpoint) {
+    if ((endpoint == NULL) || !endpoint->tx_in_flight)
+        return;
+    isotp_tx_reset(&endpoint->tx);
+    endpoint->tx_in_flight = false;
+    endpoint->in_flight_final = false;
+    endpoint->in_flight_reset_completion = false;
+    endpoint->tx_reset_completion = false;
+    endpoint->queued_response_pending = false;
+    endpoint->queued_response_length = 0U;
+    endpoint->queued_reset_completion = false;
+    uds_server_clear_reset(&endpoint->uds);
+}
+
 static void complete_in_flight(UdsIsoTpEndpoint *endpoint) {
     if ((endpoint == NULL) || !endpoint->tx_in_flight)
         return;
@@ -147,8 +161,14 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
 IsoTpStatus uds_isotp_endpoint_process(UdsIsoTpEndpoint *endpoint, uint32_t now_ms) {
     if (endpoint == NULL)
         return ISOTP_ERR_ARGUMENT;
-    if (endpoint->tx_in_flight)
+    if (endpoint->tx_in_flight) {
+        if ((endpoint->config.tx_error != NULL) &&
+            endpoint->config.tx_error(endpoint->config.context)) {
+            abort_in_flight(endpoint);
+            return ISOTP_ERR_STATE;
+        }
         return ISOTP_OK;
+    }
 
     IsoTpStatus status = submit_control(endpoint);
     if (endpoint->control_pending || (status == ISOTP_TX_FRAME_READY))

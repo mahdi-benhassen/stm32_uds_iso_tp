@@ -25,6 +25,7 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
 #endif
     config.send_frame = uds_c092_fdcan_send;
     config.tx_complete = uds_c092_fdcan_tx_complete;
+    config.tx_error = uds_c092_fdcan_tx_error;
     config.clock_ms = uds_c092_fdcan_clock;
     config.reset_event = reset_event;
     config.context = transport;
@@ -77,8 +78,11 @@ void uds_c092_app_process(uint32_t now_ms) {
     }
     __enable_irq();
 
+    __disable_irq();
     uds_c092_fdcan_poll_tx_events(s_transport);
-    if (uds_c092_fdcan_tx_complete(s_transport))
+    bool tx_complete = uds_c092_fdcan_tx_complete(s_transport);
+    __enable_irq();
+    if (tx_complete)
         uds_isotp_endpoint_tx_complete(&s_endpoint);
     if (has_frame)
         (void)uds_isotp_endpoint_receive(&s_endpoint, &frame, now_ms);
