@@ -55,6 +55,7 @@ In the generated C092 application, the copy-ready wiring is:
 ```c
 static UdsC092FdcanTransport uds_transport;
 
+/* Run after FDCAN configuration/filters, but before notification activation and Start. */
 uds_c092_fdcan_transport_init(&uds_transport, &hfdcan1,
                               UDS_C092_REQUEST_ID, UDS_C092_RESPONSE_ID);
 uds_c092_app_init_default(&uds_transport, uds_c092_platform_now_ms());
@@ -114,11 +115,11 @@ This repository currently provides the portable core, the FDCAN adapter contract
 
 ## ECUReset recovery and diagnostic readiness
 
-The maintained C092 adapter does not assume that FDCAN state survives `NVIC_SystemReset()`. The generated startup code must execute the complete HAL/CubeMX sequence again: `HAL_Init()`, clock and GPIO setup, `MX_FDCAN1_Init()`, standard-filter configuration, global-filter configuration, RX notification activation, `HAL_FDCAN_Start()`, transport initialization, and endpoint initialization. The application must not call `uds_c092_app_process()` as a substitute for that sequence.
+The maintained C092 adapter does not assume that FDCAN state survives `NVIC_SystemReset()`. The generated startup code must execute the complete HAL/CubeMX sequence again: `HAL_Init()`, clock and GPIO setup, `MX_FDCAN1_Init()`, standard-filter configuration, global-filter configuration, transport initialization, and endpoint initialization, followed by RX notification activation and `HAL_FDCAN_Start()`. The application must not call `uds_c092_app_process()` as a substitute for that sequence. The transport and endpoint must be initialized before notification activation or FDCAN start; otherwise an RX interrupt can reach `uds_c092_app_rx_from_isr_ex()` while `s_initialized` is still false and the frame will be rejected.
 
 Issue #19 provides an optional platform-owned readiness state and bounded trace in `uds_diagnostics.h/.c`. It has three states: `UDS_C092_DIAG_BOOTING`, `UDS_C092_DIAG_READY`, and `UDS_C092_DIAG_FAULT`. `READY` is reached only after the application marks HAL initialization, clock, GPIO, FDCAN initialization, filter, RX notification, FDCAN start, and UDS initialization. A fatal HAL/FDCAN startup result should call `uds_c092_diagnostic_fault()` rather than entering the diagnostic loop.
 
-A debug build may define `UDS_C092_DIAGNOSTIC_BOOT_TRACE=1` and attach a caller-owned `UdsC092DiagnosticTrace` before application initialization:
+A debug build may define `UDS_C092_DIAGNOSTIC_BOOT_TRACE=1` and attach a caller-owned `UdsC092DiagnosticTrace` before application initialization. Perform transport and application initialization after filters but before enabling RX notification and starting FDCAN:
 
 ```c
 static UdsC092DiagnosticTrace uds_trace;
@@ -135,9 +136,9 @@ uds_c092_app_init_default(&uds_transport, HAL_GetTick());
 uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_DIAGNOSTIC_READY, HAL_GetTick());
 ```
 
-The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages, including UDS endpoint initialization performed by `uds_c092_app_init()`, have succeeded. The ISR path does not print, wait, or dispatch UDS. Once FDCAN is started and RX notification is active, a valid frame is captured in the single bounded mailbox even if the trace remains `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. A second frame while the mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should still wait for the project-defined diagnostic-ready condition after reset. The repository does not invent a fixed 10/20/50 ms delay; the reset-to-ready interval must be measured on the selected C092 board.
+The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages, including UDS endpoint initialization performed by `uds_c092_app_init()`, have succeeded. The ISR path does not print, wait, or dispatch UDS. Once FDCAN is started and RX notification is active, a valid frame is captured in the single bounded mailbox even if the trace remains `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The endpoint must already have been initialized before that point; otherwise `s_initialized` correctly rejects the frame as unsafe. A second frame while the mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should still wait for the project-defined diagnostic-ready condition after reset. The repository does not invent a fixed 10/20/50 ms delay; the reset-to-ready interval must be measured on the selected C092 board.
 
-The trace counters expose `fdcan_rx_count`, `isotp_rx_count`, `uds_request_count`, `uds_response_count`, `fdcan_tx_count`, and rejected/dropped RX counts. These counters are bounded-width monotonic counters that reset with the MCU and are suitable for a debugger or a project-owned diagnostic readout. They are evidence aids, not a replacement for timestamped CAN-analyzer traces.
+The trace counters expose `fdcan_rx_count`, `rx_accepted_count`, `rx_rejected_not_initialized_count`, `isotp_rx_count`, `uds_request_count`, `uds_response_count`, `fdcan_tx_count`, and rejected/dropped/overflowed RX counts. These counters are bounded-width monotonic counters that reset with the MCU and are suitable for a debugger or a project-owned diagnostic readout. They are evidence aids, not a replacement for timestamped CAN-analyzer traces.
 
 The reset sequence remains transport-completion-driven:
 

@@ -88,6 +88,7 @@ The `10 01` frame is visible on the bus, but the capture contains no evidence th
 
 The generated project must be updated, not the generic reset algorithm copied again. Its application-owned startup should attach a `UdsC092DiagnosticTrace`, mark each successful HAL/FDCAN/endpoint stage, and expose or record the transition to `UDS_C092_DIAG_READY`. The maintained application no longer gates mailbox capture on this higher-level READY mark; it records accepted frames and processes them from mainline once endpoint initialization is complete. Its RX callback should use `uds_c092_fdcan_data_length_bytes(rxHeader.DataLength)` and pass the actual Classic/FD, BRS, identifier-type, and remote-frame metadata through `uds_c092_app_rx_from_isr_ex()`.
 
+
 The tester must send `10 01` only after the project-defined ready indication, or use a bounded readiness-aware retry policy. A fixed delay may be used experimentally to measure the window, but it must not be treated as the ECUReset correctness mechanism. The next HIL trace must record `RESET_ENTRY`, `FDCAN_STARTED`, `UDS_INIT_DONE`, `READY`, RX arrival, UDS dispatch, TX submission, and TX completion timestamps. Without those points, the remaining distinction between “request during boot” and “post-reset FDCAN/RX failure” cannot be made from the current captures.
 
 ## References
@@ -183,3 +184,21 @@ python3 tests/conformance/check_c092_generated_integration.py /path/to/STM32C092
 ```
 
 It is intentionally a source-contract check, not a substitute for the board trace.
+
+## Issue #21 archive re-review
+
+The archive attached to Issue #21 reproduces the same integration ordering defect. Its `Src/main.c` calls `HAL_FDCAN_ActivateNotification()` at lines 127–131 and `HAL_FDCAN_Start()` at lines 144–148, then calls `uds_c092_fdcan_transport_init()` and `uds_c092_app_init_default()` at lines 149–152. Its RX callback at lines 208–222 is therefore live before `s_initialized` can become true in `stm32c092/uds_app_fdcan.c` lines 16–55. The guard at lines 79–83 is correct as a safety guard; the incorrect part is allowing the callback to become reachable before endpoint initialization.
+
+The supplied STM32C0 HAL confirms the safe ordering. `HAL_FDCAN_ActivateNotification()` accepts both `HAL_FDCAN_STATE_READY` and `HAL_FDCAN_STATE_BUSY`, while `HAL_FDCAN_Start()` requires the handle to still be `HAL_FDCAN_STATE_READY` and then changes it to `BUSY`. Transport and endpoint initialization do not transmit anything, so they can complete while the HAL remains `READY`; notification activation and `HAL_FDCAN_Start()` can then run, followed by the main loop. This removes the `s_initialized == false` race without a delay and without weakening the guard.
+
+The new generated-project checker rejects the Issue #21 archive for missing diagnostic initialization/attachment, missing readiness marking, and the invalid application-before-FDCAN ordering. It also reports the non-fatal but required integration warnings for the broad range filter, raw HAL `DataLength`, compatibility RX wrapper, and `FDCAN_NO_TX_EVENTS`. A disposable corrected copy passes the checker. The checker is a source-contract guard; only board execution can prove the complete CAN path.
+
+The C092 host regression now delivers `10 01` immediately after modeled FDCAN start, before `DIAGNOSTIC_READY`, and verifies an emitted `50 01` response. The generic endpoint regression separately verifies `11 01`, matching TX completion, reset execution, reboot initialization, and repeated post-reset traffic. Neither test is a substitute for the requested 100-cycle C092 HIL campaign.
+
+## References
+
+[1]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/issues/21 "Issue #21: it is still error, you didn't resolve this problem"
+[2]: https://github.com/user-attachments/files/31489557/STM32C092_UDS-error.zip "Reporter STM32C092 error project attached to Issue #21"
+[3]: https://github.com/mahdi-benhassen/stm32_uds_iso_tp/blob/main/examples/stm32c092/README.md "STM32C092 integration guide"
+
+*The archive and issue are evidence supplied by the reporter. The GitHub links are references only; no archive contents are executed by the repository validation.*

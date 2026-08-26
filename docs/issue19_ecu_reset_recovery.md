@@ -22,6 +22,7 @@ The source-level defects and acceptance risks identified are as follows.
 | Queue acceptance is not physical TX completion | The generic endpoint previously treated a successful `send_frame()` with no `tx_complete` callback as immediately complete. | ECUReset could execute without a transport-defined final-frame completion boundary. |
 | ECUReset requires an explicit completion contract | The maintained C092 application supplies `uds_c092_fdcan_tx_complete()`, which waits for a matching stored TX event. A reset-capable generic endpoint previously did not enforce that requirement. | An application could configure reset without the information needed to safely execute it. |
 | Readiness gating could discard a valid post-start frame | The first implementation dropped a valid frame whenever the higher-level diagnostic trace was not yet `READY`. | A request received after FDCAN start could be lost even though the bounded RX handoff was usable. The corrected application retains it in the mailbox and records `RX_ACCEPTED`. |
+| RX could arrive before endpoint initialization | The reporter archive starts FDCAN and enables RX notification before calling transport/endpoint initialization; `s_initialized` is false in the callback during that window. | The safety guard must remain. The correction initializes transport/ISO-TP/UDS before notification and `HAL_FDCAN_Start()`, and records `RX_REJECTED_NOT_INITIALIZED` if an invalid integration still triggers the callback early. |
 | The reporter project’s exact runtime stop point is unproven | The supplied project has no physical trace in the repository showing whether the next frame was received, parsed, responded to, queued, or transmitted. | A fixed delay would conceal the failing stage rather than identify it. |
 
 The corrected conclusion is therefore: **the repository had an unsafe generic completion fallback, lacked explicit C092 readiness instrumentation, and initially gated mailbox capture on the higher-level READY state. The corrected C092 application keeps valid post-start frames in a bounded mailbox; the reporter’s exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
@@ -89,7 +90,7 @@ The following software evidence is available:
 | Reset recovery contract | 100 reset cycles with 10 normal requests per cycle, totaling 1,000 post-reset requests in the host model. |
 | Service sequence contract | Post-reset `0x10`, `0x22` with multi-frame response, `0x3E`, invalid request recovery, and subsequent valid request. |
 | Endpoint safety contract | ECUReset configuration without `tx_complete` is rejected. |
-| C092 diagnostic contract | Readiness ordering, post-start mailbox acceptance/full handling, fault state, reset reinitialization, and lifecycle counters. |
+| C092 diagnostic contract | Readiness ordering, pre-initialization rejection, post-start mailbox acceptance/full handling, fault state, reset reinitialization, and lifecycle counters. |
 | C092 portability | **Passed** against the supplied reporter HAL headers after the final source changes. |
 
 These are host, static, and cross-compile contracts. They are not physical CAN evidence.
