@@ -153,6 +153,7 @@ def main() -> int:
         ROOT / "docs/ecu_reset_timing.md",
         ROOT / "docs/issue19_reporter_differential.md",
         ROOT / "tests/conformance/check_c092_generated_integration.py",
+        ROOT / "tests/standalone/run_c092_mock_hardware.py",
     ):
         if not document.exists():
             raise SystemExit(f"Issue #19 documentation/checker missing: {document}")

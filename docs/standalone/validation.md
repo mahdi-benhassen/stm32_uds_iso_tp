@@ -23,3 +23,20 @@ The release gate should run the five-test core CTest set when adapter examples a
 | CAN-FD HIL | FDCAN DLC/BRS/extended-length interoperability | Production security or update safety unless separately tested |
 
 No repository release should claim complete ISO 15765-2 or ISO 14229 conformance without a requirements matrix, interoperability tests, negative tests, timing evidence, and review of every enabled optional feature.
+
+## C092 mock-hardware reset campaign
+
+The repository includes a deterministic software-only campaign for the post-reset sequence. Run it against a configured CTest build with:
+
+```sh
+python3 tests/standalone/run_c092_mock_hardware.py \
+  --cycles 100 \
+  --requests-per-cycle 10 \
+  --first-request-delay-us 0 \
+  --ctest-dir build/standalone \
+  --report build/reports/c092-mock-hardware.json
+```
+
+The harness first runs the compiled immediate-reset and generic reset-recovery contracts, then models the unsafe RX-before-initialization window and confirms that the safety guard rejects it. Its corrected campaign initializes the transport and endpoint before enabling RX, sends `11 01`, completes the `51 01` response before reset, reboots the model, and delivers the first `10 01` with zero additional delay. Each cycle also checks TesterPresent, invalid-request handling, and a subsequent valid request. The JSON report records event order, counters, zero-delay operation, and explicit limitations.
+
+This is a deterministic state-machine model, not an STM32 emulator. It does not prove vendor HAL register behavior, NVIC latency, transceiver operation, CAN wiring, Keil linking, bus arbitration, electrical TX completion, reset-cause registers, or measured reset-to-ready timing. Physical C092 HIL remains required for final acceptance.

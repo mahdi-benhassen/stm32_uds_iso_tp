@@ -77,6 +77,11 @@ jobs:
         run: ctest --test-dir build/standalone --output-on-failure
       - name: C092 immediate ECUReset recovery regression
         run: ctest --test-dir build/standalone -R 'uds_iso_tp_c092_immediate_reset_rx_contract|uds_iso_tp_reset_recovery_contract' --output-on-failure
+      - name: C092 mock-hardware reset campaign
+        run: |
+          python3 -m py_compile tests/standalone/run_c092_mock_hardware.py
+          mkdir -p build/reports
+          python3 tests/standalone/run_c092_mock_hardware.py --cycles 100 --requests-per-cycle 10 --first-request-delay-us 0 --ctest-dir build/standalone --report build/reports/c092-mock-hardware.json
       - name: Instrumented coverage
         run: |
           sudo apt-get install -y gcovr
@@ -106,3 +111,8 @@ jobs:
           python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --profile classic-can --board-profile docs/physical_validation/board_profile.yaml --analyzer ci-dry-run --json build/reports/classic.json --csv build/reports/classic.csv --report build/reports/classic.md
           python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --profile c092-fdcan-classic --board-profile docs/physical_validation/board_profile.yaml --analyzer ci-dry-run --json build/reports/c092.json --csv build/reports/c092.csv --report build/reports/c092.md
           python3 tests/standalone/run_uds_iso_tp_hil.py --dry-run --profile can-fd --board-profile docs/physical_validation/board_profile.yaml --json build/reports/fd.json --csv build/reports/fd.csv --report build/reports/fd.md
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: c092-validation-reports
+          path: build/reports/
