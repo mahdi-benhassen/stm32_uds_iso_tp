@@ -51,6 +51,11 @@ static bool fake_tx_complete(void *context) {
     return false;
 }
 
+static bool fake_tx_complete_immediate(void *context) {
+    (void)context;
+    return true;
+}
+
 static bool fake_tx_error(void *context) {
     Stm32F767BxCanBinding *binding = (Stm32F767BxCanBinding *)context;
     FakeBus *bus = (binding != NULL) ? (FakeBus *)binding->context : NULL;
@@ -221,6 +226,7 @@ static void test_ecu_reset_response_and_exactly_once_execution(void) {
     UdsIsoTpEndpoint endpoint;
     reset_execute_count = 0U;
     configure_bxcan(&config, &binding, &callbacks);
+    config.tx_complete = fake_tx_complete_immediate;
     assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
     IsoTpCanFrame request = {.can_id = 0x7E0U, .dlc = 3U, .data = {0x02U, 0x11U, 0x01U}};
     assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);

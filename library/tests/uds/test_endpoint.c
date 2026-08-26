@@ -176,6 +176,9 @@ static void test_deferred_reset_and_full_duplex(void) {
         .uds_context = &reset_sink,
     };
     UdsIsoTpEndpoint reset_endpoint;
+    UdsIsoTpEndpointConfig unsafe_reset_config = reset_config;
+    unsafe_reset_config.tx_complete = NULL;
+    assert(!uds_isotp_endpoint_init(&reset_endpoint, &unsafe_reset_config, 0U));
     assert(uds_isotp_endpoint_init(&reset_endpoint, &reset_config, 0U));
     IsoTpCanFrame reset_request = tester_present(false);
     reset_request.dlc = 3U;

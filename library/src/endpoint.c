@@ -88,7 +88,8 @@ static void complete_in_flight(UdsIsoTpEndpoint *endpoint) {
 bool uds_isotp_endpoint_init(UdsIsoTpEndpoint *endpoint, const UdsIsoTpEndpointConfig *config,
                              uint32_t now_ms) {
     if ((endpoint == NULL) || (config == NULL) || (config->send_frame == NULL) ||
-        (config->clock_ms == NULL) || (config->request_id == config->response_id)) {
+        (config->clock_ms == NULL) || (config->request_id == config->response_id) ||
+        ((config->uds_callbacks.ecu_reset != NULL) && (config->tx_complete == NULL))) {
         return false;
     }
     endpoint->config = *config;

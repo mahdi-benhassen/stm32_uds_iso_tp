@@ -22,6 +22,7 @@ typedef void (*UdsIsoTpResetEventFn)(void *context, UdsResetEvent event);
 
 typedef struct {
     UdsIsoTpSendFrameFn send_frame;
+    /* Required when uds_callbacks.ecu_reset is configured; queue acceptance is not completion. */
     UdsIsoTpTxCompleteFn tx_complete;
     UdsIsoTpTxErrorFn tx_error;
     UdsIsoTpClockFn clock_ms;
