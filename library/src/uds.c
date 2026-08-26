@@ -538,6 +538,10 @@ static UdsCallbackResult service_clear_dtc(UdsServer *server, const uint8_t *req
 static UdsCallbackResult service_modular_backend(UdsServer *server, const uint8_t *request,
                                                  uint16_t request_len, uint8_t *response,
                                                  uint16_t *response_len, uint16_t capacity) {
+    UdsCallbackResult preflight = uds_service_backends_preflight(
+        server->callbacks.service_backends, server->context, request[0], request, request_len);
+    if (preflight != UDS_RESULT_OK)
+        return callback_result(server, preflight, request, response, response_len, capacity);
     UdsServiceHandlerFn handler =
         uds_service_backends_handler(server->callbacks.service_backends, request[0]);
     if (handler == NULL)
