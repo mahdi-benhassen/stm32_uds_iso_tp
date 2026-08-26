@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 
+#ifndef __disable_irq
+#define __disable_irq() ((void)0)
+#endif
+#ifndef __enable_irq
+#define __enable_irq() ((void)0)
+#endif
+
 typedef enum { HAL_ERROR = 0U, HAL_OK = 1U } HAL_StatusTypeDef;
 
 typedef struct {

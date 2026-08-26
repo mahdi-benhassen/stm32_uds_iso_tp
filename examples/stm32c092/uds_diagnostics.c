@@ -2,8 +2,10 @@
 
 #include <stddef.h>
 
-#define UDS_C092_DIAG_REQUIRED_MASK (((1UL << 9U) - 1UL) & ~1UL)
+#define UDS_C092_DIAG_REQUIRED_MASK                                                                \
+    (((1UL << (UDS_C092_BOOT_UDS_INIT_DONE + 1U)) - 1UL) & ~(1UL << UDS_C092_BOOT_RESET_ENTRY))
 
+// cppcheck-suppress constParameterPointer
 static void record_event(UdsC092DiagnosticTrace *trace, UdsC092DiagnosticEvent event,
                          uint32_t now_ms) {
     if ((trace == NULL) || (event >= UDS_C092_BOOT_EVENT_COUNT))
@@ -22,11 +24,15 @@ void uds_c092_diagnostic_init(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
     trace->state = UDS_C092_DIAG_BOOTING;
     trace->stage_mask = 0U;
     trace->fdcan_rx_count = 0U;
+    trace->rx_accepted_count = 0U;
     trace->isotp_rx_count = 0U;
     trace->uds_request_count = 0U;
     trace->uds_response_count = 0U;
+    trace->uds_response_generated_count = 0U;
     trace->fdcan_tx_count = 0U;
+    trace->tx_complete_count = 0U;
     trace->rx_dropped_while_booting = 0U;
+    trace->rx_mailbox_full_count = 0U;
     trace->rx_rejected_count = 0U;
     for (size_t index = 0U; index < UDS_C092_BOOT_EVENT_COUNT; ++index)
         trace->event_timestamp_ms[index] = UINT32_MAX;
@@ -43,16 +49,14 @@ void uds_c092_diagnostic_mark(UdsC092DiagnosticTrace *trace, UdsC092DiagnosticEv
             trace->state = UDS_C092_DIAG_READY;
         return;
     }
-    if (event < UDS_C092_BOOT_UDS_INIT_DONE)
+    if ((event > UDS_C092_BOOT_RESET_ENTRY) && (event <= UDS_C092_BOOT_UDS_INIT_DONE))
         trace->stage_mask |= (uint32_t)(1UL << event);
-    else if (event == UDS_C092_BOOT_UDS_INIT_DONE)
-        trace->stage_mask |= (uint32_t)(1UL << UDS_C092_BOOT_UDS_INIT_DONE);
 }
 
 void uds_c092_diagnostic_fault(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
     if (trace == NULL)
         return;
-    (void)now_ms;
+    record_event(trace, UDS_C092_BOOT_RESET_ENTRY, now_ms);
     trace->state = UDS_C092_DIAG_FAULT;
 }
 
@@ -75,16 +79,29 @@ void uds_c092_diagnostic_count_rx(UdsC092DiagnosticTrace *trace, uint32_t now_ms
     record_event(trace, UDS_C092_BOOT_FIRST_RX_AFTER_RESET, now_ms);
 }
 
+void uds_c092_diagnostic_count_rx_accepted(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
+    if (trace == NULL)
+        return;
+    trace->rx_accepted_count++;
+    record_event(trace, UDS_C092_BOOT_RX_ACCEPTED, now_ms);
+}
+
 void uds_c092_diagnostic_count_isotp_rx(UdsC092DiagnosticTrace *trace) {
-    if (trace != NULL)
-        trace->isotp_rx_count++;
+    uds_c092_diagnostic_count_isotp_rx_at(trace, 0U);
+}
+
+void uds_c092_diagnostic_count_isotp_rx_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
+    if (trace == NULL)
+        return;
+    trace->isotp_rx_count++;
+    record_event(trace, UDS_C092_BOOT_ISOTP_RX, now_ms);
 }
 
 void uds_c092_diagnostic_count_uds_request(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
     if (trace == NULL)
         return;
     trace->uds_request_count++;
-    record_event(trace, UDS_C092_BOOT_FIRST_UDS_REQUEST_AFTER_RESET, now_ms);
+    record_event(trace, UDS_C092_BOOT_UDS_REQUEST, now_ms);
 }
 
 void uds_c092_diagnostic_count_uds_response(UdsC092DiagnosticTrace *trace) {
@@ -92,16 +109,49 @@ void uds_c092_diagnostic_count_uds_response(UdsC092DiagnosticTrace *trace) {
         trace->uds_response_count++;
 }
 
+void uds_c092_diagnostic_count_uds_response_generated(UdsC092DiagnosticTrace *trace,
+                                                      uint32_t now_ms) {
+    if (trace == NULL)
+        return;
+    trace->uds_response_generated_count++;
+    trace->uds_response_count++;
+    record_event(trace, UDS_C092_BOOT_UDS_RESPONSE_GENERATED, now_ms);
+}
+
 void uds_c092_diagnostic_count_fdcan_tx(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
     if (trace == NULL)
         return;
     trace->fdcan_tx_count++;
-    record_event(trace, UDS_C092_BOOT_FIRST_TX_AFTER_RESET, now_ms);
+    record_event(trace, UDS_C092_BOOT_TX_SUBMITTED, now_ms);
+}
+
+void uds_c092_diagnostic_count_tx_complete(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
+    if (trace == NULL)
+        return;
+    trace->tx_complete_count++;
+    record_event(trace, UDS_C092_BOOT_TX_COMPLETE, now_ms);
 }
 
 void uds_c092_diagnostic_count_rx_drop(UdsC092DiagnosticTrace *trace) {
-    if (trace != NULL)
+    uds_c092_diagnostic_count_rx_drop_at(trace, 0U);
+}
+
+void uds_c092_diagnostic_count_rx_drop_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
+    if (trace != NULL) {
         trace->rx_dropped_while_booting++;
+        record_event(trace, UDS_C092_BOOT_RX_DROPPED_NOT_READY, now_ms);
+    }
+}
+
+void uds_c092_diagnostic_count_rx_mailbox_full(UdsC092DiagnosticTrace *trace) {
+    uds_c092_diagnostic_count_rx_mailbox_full_at(trace, 0U);
+}
+
+void uds_c092_diagnostic_count_rx_mailbox_full_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
+    if (trace != NULL) {
+        trace->rx_mailbox_full_count++;
+        record_event(trace, UDS_C092_BOOT_RX_MAILBOX_FULL, now_ms);
+    }
 }
 
 void uds_c092_diagnostic_count_rx_reject(UdsC092DiagnosticTrace *trace) {

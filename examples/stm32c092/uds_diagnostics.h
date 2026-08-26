@@ -19,28 +19,47 @@ typedef enum {
     UDS_C092_BOOT_HAL_INIT_DONE,
     UDS_C092_BOOT_CLOCK_READY,
     UDS_C092_BOOT_GPIO_READY,
+    UDS_C092_BOOT_FDCAN_INIT_START,
     UDS_C092_BOOT_FDCAN_INIT_DONE,
-    UDS_C092_BOOT_FDCAN_FILTER_READY,
-    UDS_C092_BOOT_FDCAN_NOTIFICATION_READY,
-    UDS_C092_BOOT_FDCAN_STARTED,
+    UDS_C092_BOOT_FDCAN_FILTER_DONE,
+    UDS_C092_BOOT_FDCAN_NOTIFICATION_DONE,
+    UDS_C092_BOOT_FDCAN_START_DONE,
+    UDS_C092_BOOT_ISOTP_INIT_DONE,
     UDS_C092_BOOT_UDS_INIT_DONE,
     UDS_C092_BOOT_DIAGNOSTIC_READY,
     UDS_C092_BOOT_FIRST_RX_AFTER_RESET,
-    UDS_C092_BOOT_FIRST_UDS_REQUEST_AFTER_RESET,
-    UDS_C092_BOOT_FIRST_TX_AFTER_RESET,
+    UDS_C092_BOOT_RX_ACCEPTED,
+    UDS_C092_BOOT_RX_DROPPED_NOT_READY,
+    UDS_C092_BOOT_RX_MAILBOX_FULL,
+    UDS_C092_BOOT_ISOTP_RX,
+    UDS_C092_BOOT_UDS_REQUEST,
+    UDS_C092_BOOT_UDS_RESPONSE_GENERATED,
+    UDS_C092_BOOT_TX_SUBMITTED,
+    UDS_C092_BOOT_TX_COMPLETE,
     UDS_C092_BOOT_EVENT_COUNT
 } UdsC092DiagnosticEvent;
+
+/* Source-compatible names used by earlier Issue #19 integration guidance. */
+#define UDS_C092_BOOT_FDCAN_FILTER_READY UDS_C092_BOOT_FDCAN_FILTER_DONE
+#define UDS_C092_BOOT_FDCAN_NOTIFICATION_READY UDS_C092_BOOT_FDCAN_NOTIFICATION_DONE
+#define UDS_C092_BOOT_FDCAN_STARTED UDS_C092_BOOT_FDCAN_START_DONE
+#define UDS_C092_BOOT_FIRST_UDS_REQUEST_AFTER_RESET UDS_C092_BOOT_UDS_REQUEST
+#define UDS_C092_BOOT_FIRST_TX_AFTER_RESET UDS_C092_BOOT_TX_SUBMITTED
 
 typedef struct {
     volatile UdsC092DiagnosticState state;
     volatile uint32_t stage_mask;
     volatile uint32_t event_timestamp_ms[UDS_C092_BOOT_EVENT_COUNT];
     volatile uint32_t fdcan_rx_count;
+    volatile uint32_t rx_accepted_count;
     volatile uint32_t isotp_rx_count;
     volatile uint32_t uds_request_count;
     volatile uint32_t uds_response_count;
+    volatile uint32_t uds_response_generated_count;
     volatile uint32_t fdcan_tx_count;
+    volatile uint32_t tx_complete_count;
     volatile uint32_t rx_dropped_while_booting;
+    volatile uint32_t rx_mailbox_full_count;
     volatile uint32_t rx_rejected_count;
 } UdsC092DiagnosticTrace;
 
@@ -53,11 +72,19 @@ bool uds_c092_filter_accept(uint32_t can_id, uint32_t request_id, uint32_t funct
                             bool is_fd, bool bit_rate_switch, bool is_extended_id,
                             bool is_remote_frame);
 void uds_c092_diagnostic_count_rx(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
+void uds_c092_diagnostic_count_rx_accepted(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_isotp_rx(UdsC092DiagnosticTrace *trace);
+void uds_c092_diagnostic_count_isotp_rx_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_uds_request(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_uds_response(UdsC092DiagnosticTrace *trace);
+void uds_c092_diagnostic_count_uds_response_generated(UdsC092DiagnosticTrace *trace,
+                                                      uint32_t now_ms);
 void uds_c092_diagnostic_count_fdcan_tx(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
+void uds_c092_diagnostic_count_tx_complete(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_rx_drop(UdsC092DiagnosticTrace *trace);
+void uds_c092_diagnostic_count_rx_drop_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
+void uds_c092_diagnostic_count_rx_mailbox_full(UdsC092DiagnosticTrace *trace);
+void uds_c092_diagnostic_count_rx_mailbox_full_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_rx_reject(UdsC092DiagnosticTrace *trace);
 
 #endif

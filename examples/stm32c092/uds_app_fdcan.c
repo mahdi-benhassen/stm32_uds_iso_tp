@@ -45,15 +45,19 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
     if (s_diagnostics != NULL) {
         uds_c092_fdcan_attach_diagnostics(transport, s_diagnostics);
-        if (s_initialized)
+        if (s_initialized) {
+            uds_c092_diagnostic_mark(s_diagnostics, UDS_C092_BOOT_ISOTP_INIT_DONE, now_ms);
             uds_c092_diagnostic_mark(s_diagnostics, UDS_C092_BOOT_UDS_INIT_DONE, now_ms);
-        else
+        } else {
             uds_c092_diagnostic_fault(s_diagnostics, now_ms);
+        }
     }
 }
 
 void uds_c092_app_attach_diagnostics(UdsC092DiagnosticTrace *trace) {
     s_diagnostics = trace;
+    if (s_transport != NULL)
+        uds_c092_fdcan_attach_diagnostics(s_transport, trace);
 }
 
 bool uds_c092_app_is_diagnostic_ready(void) {
@@ -78,13 +82,14 @@ void uds_c092_app_rx_from_isr_ex(uint32_t can_id, const uint8_t *data, uint8_t d
         uds_c092_diagnostic_count_rx_reject(s_diagnostics);
         return;
     }
-    if (!uds_c092_app_is_diagnostic_ready()) {
-        uds_c092_diagnostic_count_rx_drop(s_diagnostics);
+    if (s_rx_pending) {
+        uds_c092_diagnostic_count_rx_mailbox_full_at(s_diagnostics,
+                                                     uds_c092_fdcan_clock(s_transport));
         return;
     }
-    if (s_rx_pending)
-        return;
-    uds_c092_diagnostic_count_rx(s_diagnostics, uds_c092_fdcan_clock(s_transport));
+    uint32_t now_ms = uds_c092_fdcan_clock(s_transport);
+    uds_c092_diagnostic_count_rx(s_diagnostics, now_ms);
+    uds_c092_diagnostic_count_rx_accepted(s_diagnostics, now_ms);
     s_rx_frame.can_id = can_id;
     s_rx_frame.dlc = dlc;
     s_rx_frame.is_fd = is_fd;
@@ -99,7 +104,7 @@ void uds_c092_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc,
 }
 
 void uds_c092_app_process(uint32_t now_ms) {
-    if (!s_initialized || (s_transport == NULL) || !uds_c092_app_is_diagnostic_ready())
+    if (!s_initialized || (s_transport == NULL))
         return;
 
     IsoTpCanFrame frame = {0};
@@ -116,16 +121,19 @@ void uds_c092_app_process(uint32_t now_ms) {
     uds_c092_fdcan_poll_tx_events(s_transport);
     bool tx_complete = uds_c092_fdcan_tx_complete(s_transport);
     __enable_irq();
-    if (tx_complete)
+    if (tx_complete) {
+        uds_c092_diagnostic_count_tx_complete(s_diagnostics, now_ms);
         uds_isotp_endpoint_tx_complete(&s_endpoint);
+    }
     if (has_frame) {
         IsoTpStatus receive_status = uds_isotp_endpoint_receive(&s_endpoint, &frame, now_ms);
         if (receive_status != ISOTP_ERR_ARGUMENT)
-            uds_c092_diagnostic_count_isotp_rx(s_diagnostics);
-        if (receive_status == ISOTP_COMPLETE) {
+            uds_c092_diagnostic_count_isotp_rx_at(s_diagnostics, now_ms);
+        if ((receive_status == ISOTP_COMPLETE) || (receive_status == ISOTP_TX_FRAME_READY)) {
             uds_c092_diagnostic_count_uds_request(s_diagnostics, now_ms);
-            if (s_endpoint.tx_pending || s_endpoint.queued_response_pending)
-                uds_c092_diagnostic_count_uds_response(s_diagnostics);
+            if ((receive_status == ISOTP_TX_FRAME_READY) &&
+                (s_endpoint.tx_pending || s_endpoint.queued_response_pending))
+                uds_c092_diagnostic_count_uds_response_generated(s_diagnostics, now_ms);
         }
     }
     (void)uds_isotp_endpoint_process(&s_endpoint, now_ms);

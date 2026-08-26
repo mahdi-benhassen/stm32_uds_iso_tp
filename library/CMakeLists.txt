@@ -152,6 +152,21 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
     add_test(NAME uds_iso_tp_c092_diagnostics_contract
              COMMAND uds_iso_tp_c092_diagnostics_test)
 
+    add_executable(uds_iso_tp_c092_app_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/test_c092_app_shim.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/uds_app_fdcan.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/can_transport_fdcan.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092/uds_diagnostics.c)
+    target_include_directories(uds_iso_tp_c092_app_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tests/portability/c092_shim
+        ${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32c092
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uds_iso_tp_c092_app_test PRIVATE uds_iso_tp_uds)
+    target_compile_options(uds_iso_tp_c092_app_test PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Werror)
+    add_test(NAME uds_iso_tp_c092_app_mailbox_contract
+             COMMAND uds_iso_tp_c092_app_test)
+
     add_executable(uds_iso_tp_aes_cmac_test
         ${CMAKE_CURRENT_SOURCE_DIR}/../tests/crypto/test_aes_cmac.c)
     target_include_directories(uds_iso_tp_aes_cmac_test PRIVATE
