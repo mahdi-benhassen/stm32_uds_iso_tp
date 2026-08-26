@@ -83,6 +83,8 @@ int main(void) {
     uds_c092_fdcan_poll_tx_events(&transport);
     assert(!uds_c092_fdcan_tx_complete(&transport));
     assert(transport.tx_error);
+    assert(uds_c092_fdcan_tx_error(&transport));
+    assert(!transport.tx_error);
 
     enqueue_status = HAL_ERROR;
     assert(!uds_c092_fdcan_send(&transport, &frame));
