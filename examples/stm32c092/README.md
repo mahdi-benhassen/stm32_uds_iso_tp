@@ -109,3 +109,42 @@ This repository currently provides the portable core, the FDCAN adapter contract
 - `examples/stm32_fdcan/` — hardware-independent FDCAN adapter contract.
 - `docs/physical_validation/README.md` — physical HIL wiring and evidence procedure.
 - `library/include/uds_iso_tp/isotp.h` — payload bound and frame API.
+
+## ECUReset recovery and diagnostic readiness
+
+The maintained C092 adapter does not assume that FDCAN state survives `NVIC_SystemReset()`. The generated startup code must execute the complete HAL/CubeMX sequence again: `HAL_Init()`, clock and GPIO setup, `MX_FDCAN1_Init()`, standard-filter configuration, global-filter configuration, RX notification activation, `HAL_FDCAN_Start()`, transport initialization, and endpoint initialization. The application must not call `uds_c092_app_process()` as a substitute for that sequence.
+
+Issue #19 provides an optional platform-owned readiness state and bounded trace in `uds_diagnostics.h/.c`. It has three states: `UDS_C092_DIAG_BOOTING`, `UDS_C092_DIAG_READY`, and `UDS_C092_DIAG_FAULT`. `READY` is reached only after the application marks HAL initialization, clock, GPIO, FDCAN initialization, filter, RX notification, FDCAN start, and UDS initialization. A fatal HAL/FDCAN startup result should call `uds_c092_diagnostic_fault()` rather than entering the diagnostic loop.
+
+A debug build may define `UDS_C092_DIAGNOSTIC_BOOT_TRACE=1` and attach a caller-owned `UdsC092DiagnosticTrace` before application initialization:
+
+```c
+static UdsC092DiagnosticTrace uds_trace;
+
+uds_c092_diagnostic_init(&uds_trace, HAL_GetTick());
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_HAL_INIT_DONE, HAL_GetTick());
+/* mark CLOCK_READY, GPIO_READY, FDCAN_INIT_DONE, and FILTER_READY at each real boundary */
+/* mark FDCAN_NOTIFICATION_READY after HAL_FDCAN_ActivateNotification() succeeds */
+/* mark FDCAN_STARTED after HAL_FDCAN_Start() succeeds */
+uds_c092_app_attach_diagnostics(&uds_trace);
+uds_c092_app_init_default(&uds_transport, HAL_GetTick());
+uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_DIAGNOSTIC_READY, HAL_GetTick());
+```
+
+The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages, including UDS endpoint initialization performed by `uds_c092_app_init()`, have succeeded. The ISR path does not print, wait, or dispatch UDS. A valid frame received while the state is `BOOTING` is counted and dropped; it is not buffered indefinitely or silently applied to partially initialized ISO-TP state. The tester must therefore wait for the project-defined diagnostic-ready condition after reset. The repository does not invent a fixed 10/20/50 ms delay; the reset-to-ready interval must be measured on the selected C092 board.
+
+The trace counters expose `fdcan_rx_count`, `isotp_rx_count`, `uds_request_count`, `uds_response_count`, `fdcan_tx_count`, and rejected/dropped RX counts. These counters are bounded-width monotonic counters that reset with the MCU and are suitable for a debugger or a project-owned diagnostic readout. They are evidence aids, not a replacement for timestamped CAN-analyzer traces.
+
+The reset sequence remains transport-completion-driven:
+
+```text
+11 xx -> UDS validation -> 51 xx response ready -> FDCAN submission
+      -> matching transport completion -> uds_server_complete_reset()
+      -> platform reset callback -> NVIC_SystemReset()
+      -> complete HAL/FDCAN/UDS startup -> DIAGNOSTIC_READY
+      -> next tester request
+```
+
+`HAL_FDCAN_AddMessageToTxFifoQ() == HAL_OK` means controller queue acceptance only. It is not the physical completion boundary used by the maintained C092 ECUReset path. No `HAL_Delay()` is required or permitted in the generic library or the ISR path.
+
+The maintained adapter accepts only the configured standard physical request ID and optional functional request ID at the application handoff. The generated FDCAN filter should be narrower than the reporter’s broad range filter, normally accepting the configured `0x7E0` physical request and `0x7DF` functional request only when functional addressing is intentionally enabled. Standard data frames are required; unrelated IDs, extended IDs, and remote frames should be rejected by the generated filter/global-filter configuration.

@@ -89,7 +89,7 @@ jobs:
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/sanitize --output-on-failure
       - name: Format check
         run: |
-          clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/crypto/*.c library/crypto/*.h library/tests/isotp/*.c library/tests/uds/*.c tests/crypto/*.c tests/fixtures/dtc/*.c tests/fixtures/dtc/*.h tests/portability/test_c092_transport_shim.c tests/security/*.c tests/security/*.h tools/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h examples/stm32c092/*.c examples/stm32c092/*.h App/Src/uds_app.c App/Src/uds_platform.c App/Src/can_transport.c App/Inc/uds_platform.h App/Inc/can_transport.h App/Inc/uds_app_config.h
+          clang-format --dry-run --Werror library/src/*.c library/include/uds_iso_tp/*.h library/crypto/*.c library/crypto/*.h library/tests/isotp/*.c library/tests/uds/*.c tests/crypto/*.c tests/fixtures/dtc/*.c tests/fixtures/dtc/*.h tests/portability/test_c092_transport_shim.c tests/portability/test_c092_diagnostics.c examples/stm32c092/uds_diagnostics.c examples/stm32c092/uds_diagnostics.h tests/security/*.c tests/security/*.h tools/*.c examples/stm32f767_bxcan/*.c examples/stm32f767_bxcan/*.h examples/stm32_fdcan/*.c examples/stm32_fdcan/*.h examples/stm32c092/*.c examples/stm32c092/*.h App/Src/uds_app.c App/Src/uds_platform.c App/Src/can_transport.c App/Inc/uds_platform.h App/Inc/can_transport.h App/Inc/uds_app_config.h
 
 
 
