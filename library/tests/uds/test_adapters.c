@@ -129,6 +129,27 @@ static void test_classic_multiframe_sequence(void) {
     assert(bus.frame_count == 2U && (bus.frames[1].data[0] >> 4U) == 2U);
 }
 
+static void test_repeated_classic_requests(void) {
+    FakeBus bus = {0};
+    Stm32F767BxCanBinding binding = {
+        .send_classic = fake_classic_send, .now_ms = fake_clock, .context = &bus};
+    UdsCallbacks callbacks = {0};
+    UdsIsoTpEndpointConfig config = {0};
+    UdsIsoTpEndpoint endpoint;
+    configure_bxcan(&config, &binding, &callbacks);
+    assert(uds_isotp_endpoint_init(&endpoint, &config, 0U));
+
+    for (uint16_t count = 0U; count < 1000U; ++count) {
+        bus.frame_count = 0U;
+        IsoTpCanFrame request = {.can_id = 0x7E0U, .dlc = 3U, .data = {0x02U, 0x3EU, 0x00U}};
+        assert(uds_isotp_endpoint_receive(&endpoint, &request, 0U) == ISOTP_TX_FRAME_READY);
+        assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
+        assert(bus.frame_count == 1U && bus.frames[0].can_id == 0x7E8U &&
+               bus.frames[0].data[0] == 0x02U && bus.frames[0].data[1] == 0x7EU &&
+               bus.frames[0].data[2] == 0x00U);
+    }
+}
+
 static void test_ecu_reset_response_and_exactly_once_execution(void) {
     FakeBus bus = {0};
     Stm32F767BxCanBinding binding = {
@@ -171,6 +192,7 @@ int main(void) {
     test_classic_send();
     test_classic_send_failure_retries();
     test_classic_multiframe_sequence();
+    test_repeated_classic_requests();
     test_ecu_reset_response_and_exactly_once_execution();
     test_fd();
     return 0;

@@ -44,8 +44,8 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     config.functional_request_id = UDS_C092_FUNCTIONAL_REQUEST_ID;
     if (application_callbacks != NULL)
         config.uds_callbacks = *application_callbacks;
-    config.uds_callbacks.ecu_reset = uds_c092_ecu_reset_prepare;
-    config.uds_callbacks.ecu_reset_execute = uds_c092_ecu_reset_execute;
+    config.uds_callbacks.ecu_reset = uds_c092_platform_reset_prepare;
+    config.uds_callbacks.ecu_reset_execute = uds_c092_platform_reset_execute;
     config.uds_context = uds_context;
 
     s_transport = transport;

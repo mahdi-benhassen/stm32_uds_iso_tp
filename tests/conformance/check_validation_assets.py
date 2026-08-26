@@ -72,6 +72,7 @@ def main() -> int:
         "isotp_config_set_padding",
         "0xCCU",
         "uds_c092_app_init_default",
+        "uds_c092_fdcan_poll_tx_events",
     )
     missing = [
         token
@@ -114,6 +115,9 @@ def main() -> int:
         raise SystemExit("C092 guide must show the default initializer call")
     if "uds_c092_app_init(&uds_transport, uds_c092_platform_now_ms(),\n                  NULL, NULL, NULL, NULL);" not in c092_guide:
         raise SystemExit("C092 guide must show the explicit NULL callback/context call")
+    app_source = (C092_DIR / "uds_app_fdcan.c").read_text(encoding="utf-8")
+    if "uds_c092_fdcan_poll_tx_events(s_transport);" not in app_source:
+        raise SystemExit("C092 application must poll stored TX events from mainline")
 
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):

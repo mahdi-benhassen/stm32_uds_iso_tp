@@ -23,6 +23,8 @@ bool uds_c092_fdcan_send(void *context, const IsoTpCanFrame *frame);
 uint8_t uds_c092_fdcan_data_length_bytes(uint32_t data_length_code);
 bool uds_c092_fdcan_tx_complete(void *context);
 void uds_c092_fdcan_on_tx_event(UdsC092FdcanTransport *transport, uint32_t interrupt_flags);
+/* Mainline fallback: drains stored TX events even when TX-event IRQ wiring is absent. */
+void uds_c092_fdcan_poll_tx_events(UdsC092FdcanTransport *transport);
 uint32_t uds_c092_fdcan_clock(void *context);
 
 #endif

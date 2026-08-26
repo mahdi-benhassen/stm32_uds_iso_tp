@@ -111,6 +111,21 @@ bool uds_c092_fdcan_tx_complete(void *context) {
     return true;
 }
 
+static void drain_tx_events(UdsC092FdcanTransport *transport, bool fifo_error) {
+    FDCAN_TxEventFifoTypeDef event = {0};
+    while (HAL_FDCAN_GetTxEvent(transport->hfdcan, &event) == HAL_OK) {
+        if (event.MessageMarker != transport->tx_marker)
+            continue;
+        transport->tx_pending = false;
+        if ((event.EventType == FDCAN_TX_EVENT) && !fifo_error && !transport->tx_error) {
+            transport->tx_complete = true;
+        } else {
+            transport->tx_complete = false;
+            transport->tx_error = true;
+        }
+    }
+}
+
 void uds_c092_fdcan_on_tx_event(UdsC092FdcanTransport *transport, uint32_t interrupt_flags) {
     if ((transport == NULL) || (transport->hfdcan == NULL))
         return;
@@ -121,22 +136,14 @@ void uds_c092_fdcan_on_tx_event(UdsC092FdcanTransport *transport, uint32_t inter
         transport->tx_complete = false;
         transport->tx_error = true;
     }
-    if ((interrupt_flags & FDCAN_IT_TX_EVT_FIFO_NEW_DATA) == 0U)
-        return;
+    if ((interrupt_flags & FDCAN_IT_TX_EVT_FIFO_NEW_DATA) != 0U)
+        drain_tx_events(transport, fifo_error);
+}
 
-    FDCAN_TxEventFifoTypeDef event = {0};
-    while (HAL_FDCAN_GetTxEvent(transport->hfdcan, &event) == HAL_OK) {
-        if (event.MessageMarker != transport->tx_marker)
-            continue;
-        transport->tx_pending = false;
-        if ((event.EventType == FDCAN_TX_EVENT) && !fifo_error) {
-            transport->tx_complete = true;
-            transport->tx_error = false;
-        } else {
-            transport->tx_complete = false;
-            transport->tx_error = true;
-        }
-    }
+void uds_c092_fdcan_poll_tx_events(UdsC092FdcanTransport *transport) {
+    if ((transport == NULL) || (transport->hfdcan == NULL))
+        return;
+    drain_tx_events(transport, false);
 }
 
 uint32_t uds_c092_fdcan_clock(void *context) {
