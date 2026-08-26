@@ -76,18 +76,20 @@ bool uds_c092_app_accept_rx(uint32_t can_id, bool is_fd, bool bit_rate_switch, b
 
 void uds_c092_app_rx_from_isr_ex(uint32_t can_id, const uint8_t *data, uint8_t dlc, bool is_fd,
                                  bool bit_rate_switch, bool is_extended_id, bool is_remote_frame) {
-    if (!s_initialized || (data == NULL) || (dlc == 0U) ||
-        (dlc > (is_fd ? ISOTP_MAX_FRAME_DATA : 8U)) ||
+    uint32_t now_ms = uds_c092_fdcan_clock(s_transport);
+    if (!s_initialized) {
+        uds_c092_diagnostic_count_rx_rejected_not_initialized(s_diagnostics, now_ms);
+        return;
+    }
+    if ((data == NULL) || (dlc == 0U) || (dlc > (is_fd ? ISOTP_MAX_FRAME_DATA : 8U)) ||
         !uds_c092_app_accept_rx(can_id, is_fd, bit_rate_switch, is_extended_id, is_remote_frame)) {
         uds_c092_diagnostic_count_rx_reject(s_diagnostics);
         return;
     }
     if (s_rx_pending) {
-        uds_c092_diagnostic_count_rx_mailbox_full_at(s_diagnostics,
-                                                     uds_c092_fdcan_clock(s_transport));
+        uds_c092_diagnostic_count_rx_mailbox_full_at(s_diagnostics, now_ms);
         return;
     }
-    uint32_t now_ms = uds_c092_fdcan_clock(s_transport);
     uds_c092_diagnostic_count_rx(s_diagnostics, now_ms);
     uds_c092_diagnostic_count_rx_accepted(s_diagnostics, now_ms);
     s_rx_frame.can_id = can_id;

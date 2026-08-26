@@ -136,7 +136,10 @@ def main() -> int:
         "UDS_C092_BOOT_UDS_RESPONSE_GENERATED",
         "UDS_C092_BOOT_TX_COMPLETE",
         "rx_accepted_count",
+        "rx_rejected_not_initialized_count",
+        "uds_c092_diagnostic_count_rx_rejected_not_initialized",
         "rx_mailbox_full_count",
+        "UDS_C092_BOOT_RX_REJECTED_NOT_INITIALIZED",
     )
     missing = [
         token

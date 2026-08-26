@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 static FDCAN_TxEventFifoTypeDef event_queue[8];
 
@@ -25,6 +26,8 @@ uint32_t uds_c092_platform_now_ms(void) {
 static uint8_t event_head;
 static uint8_t event_tail;
 static HAL_StatusTypeDef enqueue_status = HAL_OK;
+static uint8_t tx_data[8];
+static uint32_t tx_calls;
 
 uint32_t HAL_GetTick(void) {
     return 100U;
@@ -35,7 +38,10 @@ HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(FDCAN_HandleTypeDef *hfdcan,
                                                 const uint8_t *data) {
     (void)hfdcan;
     (void)header;
-    (void)data;
+    if (data != NULL) {
+        (void)memcpy(tx_data, data, sizeof(tx_data));
+        tx_calls++;
+    }
     return enqueue_status;
 }
 
@@ -64,24 +70,27 @@ int main(void) {
     FDCAN_HandleTypeDef hfdcan = {0};
     UdsC092FdcanTransport transport = {0};
     UdsC092DiagnosticTrace trace;
-    const uint8_t tester_present[] = {0x02U, 0x3EU, 0x00U};
+    const uint8_t session_control[] = {0x02U, 0x10U, 0x01U};
 
     uds_c092_diagnostic_init(&trace, 0U);
+    uds_c092_app_attach_diagnostics(&trace);
+    uds_c092_app_rx_from_isr_ex(0x7E0U, session_control, 3U, false, false, false, false);
+    assert(trace.rx_rejected_not_initialized_count == 1U);
     mark_started_and_initialized(&trace);
     uds_c092_fdcan_transport_init(&transport, &hfdcan, 0x7E0U, 0x7E8U);
-    uds_c092_app_attach_diagnostics(&trace);
     uds_c092_app_init_default(&transport, 9U);
     assert(!uds_c092_app_is_diagnostic_ready());
 
-    /* FDCAN is started, but the application has not marked READY yet. */
-    uds_c092_app_rx_from_isr_ex(0x7E0U, tester_present, 3U, false, false, false, false);
+    /* FDCAN has just started; deliver the first post-reset request immediately,
+     * before the higher-level diagnostic READY mark. */
+    uds_c092_app_rx_from_isr_ex(0x7E0U, session_control, 3U, false, false, false, false);
     assert(trace.fdcan_rx_count == 1U);
     assert(trace.rx_accepted_count == 1U);
     assert(trace.rx_dropped_while_booting == 0U);
     assert(trace.rx_mailbox_full_count == 0U);
 
     /* The single bounded mailbox rejects only the next simultaneous frame. */
-    uds_c092_app_rx_from_isr_ex(0x7E0U, tester_present, 3U, false, false, false, false);
+    uds_c092_app_rx_from_isr_ex(0x7E0U, session_control, 3U, false, false, false, false);
     assert(trace.rx_mailbox_full_count == 1U);
 
     uds_c092_app_process(10U);
@@ -90,5 +99,7 @@ int main(void) {
     assert(trace.uds_response_generated_count == 1U);
     assert(trace.uds_response_count == 1U);
     assert(enqueue_status == HAL_OK);
+    assert(tx_calls == 1U);
+    assert(tx_data[0] == 0x06U && tx_data[1] == 0x50U && tx_data[2] == 0x01U);
     return 0;
 }

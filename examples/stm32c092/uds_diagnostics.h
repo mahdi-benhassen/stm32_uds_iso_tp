@@ -30,6 +30,7 @@ typedef enum {
     UDS_C092_BOOT_FIRST_RX_AFTER_RESET,
     UDS_C092_BOOT_RX_ACCEPTED,
     UDS_C092_BOOT_RX_DROPPED_NOT_READY,
+    UDS_C092_BOOT_RX_REJECTED_NOT_INITIALIZED,
     UDS_C092_BOOT_RX_MAILBOX_FULL,
     UDS_C092_BOOT_ISOTP_RX,
     UDS_C092_BOOT_UDS_REQUEST,
@@ -59,6 +60,7 @@ typedef struct {
     volatile uint32_t fdcan_tx_count;
     volatile uint32_t tx_complete_count;
     volatile uint32_t rx_dropped_while_booting;
+    volatile uint32_t rx_rejected_not_initialized_count;
     volatile uint32_t rx_mailbox_full_count;
     volatile uint32_t rx_rejected_count;
 } UdsC092DiagnosticTrace;
@@ -83,6 +85,8 @@ void uds_c092_diagnostic_count_fdcan_tx(UdsC092DiagnosticTrace *trace, uint32_t 
 void uds_c092_diagnostic_count_tx_complete(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_rx_drop(UdsC092DiagnosticTrace *trace);
 void uds_c092_diagnostic_count_rx_drop_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
+void uds_c092_diagnostic_count_rx_rejected_not_initialized(UdsC092DiagnosticTrace *trace,
+                                                           uint32_t now_ms);
 void uds_c092_diagnostic_count_rx_mailbox_full(UdsC092DiagnosticTrace *trace);
 void uds_c092_diagnostic_count_rx_mailbox_full_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms);
 void uds_c092_diagnostic_count_rx_reject(UdsC092DiagnosticTrace *trace);

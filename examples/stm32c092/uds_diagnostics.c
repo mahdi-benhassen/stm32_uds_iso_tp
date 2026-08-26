@@ -32,6 +32,7 @@ void uds_c092_diagnostic_init(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
     trace->fdcan_tx_count = 0U;
     trace->tx_complete_count = 0U;
     trace->rx_dropped_while_booting = 0U;
+    trace->rx_rejected_not_initialized_count = 0U;
     trace->rx_mailbox_full_count = 0U;
     trace->rx_rejected_count = 0U;
     for (size_t index = 0U; index < UDS_C092_BOOT_EVENT_COUNT; ++index)
@@ -134,6 +135,14 @@ void uds_c092_diagnostic_count_tx_complete(UdsC092DiagnosticTrace *trace, uint32
 
 void uds_c092_diagnostic_count_rx_drop(UdsC092DiagnosticTrace *trace) {
     uds_c092_diagnostic_count_rx_drop_at(trace, 0U);
+}
+
+void uds_c092_diagnostic_count_rx_rejected_not_initialized(UdsC092DiagnosticTrace *trace,
+                                                           uint32_t now_ms) {
+    if (trace != NULL) {
+        trace->rx_rejected_not_initialized_count++;
+        record_event(trace, UDS_C092_BOOT_RX_REJECTED_NOT_INITIALIZED, now_ms);
+    }
 }
 
 void uds_c092_diagnostic_count_rx_drop_at(UdsC092DiagnosticTrace *trace, uint32_t now_ms) {
