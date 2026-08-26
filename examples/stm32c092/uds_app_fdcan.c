@@ -53,6 +53,10 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     s_initialized = uds_isotp_endpoint_init(&s_endpoint, &config, now_ms);
 }
 
+void uds_c092_app_init_default(UdsC092FdcanTransport *transport, uint32_t now_ms) {
+    uds_c092_app_init(transport, now_ms, NULL, NULL, NULL, NULL);
+}
+
 void uds_c092_app_rx_from_isr(uint32_t can_id, const uint8_t *data, uint8_t dlc, bool is_fd,
                               bool bit_rate_switch) {
     if (!s_initialized || (data == NULL) || (dlc == 0U) ||

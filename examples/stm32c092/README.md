@@ -50,16 +50,14 @@ The profile constants are in `uds_app_config.h`; the generic library default rem
 
 For ECUReset, do not treat `HAL_FDCAN_AddMessageToTxFifoQ()` returning `HAL_OK` as physical completion. The maintained adapter sets `FDCAN_STORE_TX_EVENTS`, uses a unique message marker, enables `FDCAN_IT_TX_EVT_FIFO_NEW_DATA`, drains matching `FDCAN_TxEventFifoTypeDef` entries in `uds_c092_fdcan_on_tx_event()`, and exposes `uds_c092_fdcan_tx_complete()` to the generic endpoint. The application calls `uds_isotp_endpoint_tx_complete()` from mainline only after the adapter reports the matching TX event. The reset executor calls `NVIC_SystemReset()` only from the application-owned `uds_platform_fdcan.c` callback.
 
-In the generated C092 application, the relevant wiring is:
+In the generated C092 application, the copy-ready wiring is:
 
 ```c
 static UdsC092FdcanTransport uds_transport;
 
 uds_c092_fdcan_transport_init(&uds_transport, &hfdcan1,
                               UDS_C092_REQUEST_ID, UDS_C092_RESPONSE_ID);
-uds_c092_app_init(&uds_transport, uds_c092_platform_now_ms(),
-                  &application_callbacks, application_context,
-                  reset_event_callback, reset_event_context);
+uds_c092_app_init_default(&uds_transport, uds_c092_platform_now_ms());
 
 void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t flags) {
     if (hfdcan == &hfdcan1)
@@ -67,16 +65,29 @@ void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t flags) 
 }
 ```
 
+`uds_c092_app_init_default()` is the intended no-manual-declaration profile. It passes `NULL` for the optional application callback table, application context, reset-event callback, and reset-event context. These names are **function parameters**, not global variables or functions. Do not write `&application_callbacks`, `application_context`, `reset_event_callback`, or `reset_event_context` unless the application declares and owns those objects. The equivalent explicit call is:
+
+```c
+uds_c092_app_init(&uds_transport, uds_c092_platform_now_ms(),
+                  NULL, NULL, NULL, NULL);
+```
+
+If the application has its own UDS callbacks or timestamped diagnostics, declare them in an application-owned source/header and pass their addresses explicitly; do not add hidden globals to this adapter.
+
 Enable both notifications in the generated FDCAN startup path, for example:
 
 ```c
-HAL_FDCAN_ActivateNotification(&hfdcan1,
-    FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_TX_EVT_FIFO_NEW_DATA, 0U);
+if (HAL_FDCAN_ActivateNotification(
+        &hfdcan1,
+        FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_TX_EVT_FIFO_NEW_DATA,
+        0U) != HAL_OK) {
+    Error_Handler();
+}
 ```
 
 The generated `HAL_FDCAN_RxFifo0Callback()` should read the header/data with `HAL_FDCAN_GetRxMessage()`, convert `rx_header.DataLength` with `uds_c092_fdcan_data_length_bytes()`, and call `uds_c092_app_rx_from_isr()` with the identifier, byte length, Classic/FD format, and BRS state. The generated `HAL_FDCAN_TxEventFifoCallback()` should call `uds_c092_fdcan_on_tx_event()` as shown above. Keep both ISRs limited to draining/capturing the frame and setting the bounded handoff; do not run UDS dispatch, Flash operations, reset handling, or waits from the ISR. Mainline code must call `uds_c092_app_process(uds_c092_platform_now_ms())`.
 
-The optional `reset_event_callback` receives `UDS_RESET_EVENT_REQUESTED`, `UDS_RESET_EVENT_RESPONSE_READY`, `UDS_RESET_EVENT_TX_SUBMITTED`, `UDS_RESET_EVENT_TX_COMPLETE`, and `UDS_RESET_EVENT_EXECUTED`. Use it for timestamped diagnostics during HIL only; it is null and zero-cost at the endpoint boundary when not configured.
+The optional reset-event callback receives `UDS_RESET_EVENT_REQUESTED`, `UDS_RESET_EVENT_RESPONSE_READY`, `UDS_RESET_EVENT_TX_SUBMITTED`, `UDS_RESET_EVENT_TX_COMPLETE`, and `UDS_RESET_EVENT_EXECUTED`. Use it for timestamped diagnostics during HIL only; it is `NULL` and zero-cost at the endpoint boundary when not configured. The adapter’s built-in ECUReset prepare/execute callbacks remain application-owned at the C092 boundary and do not require a separately declared `application_callbacks` object.
 
 ## FDCAN adapter requirements
 

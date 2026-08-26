@@ -60,6 +60,8 @@ def main() -> int:
     if missing_files:
         raise SystemExit(f"C092 adapter missing required files: {missing_files}")
     c092_transport = (C092_DIR / "can_transport_fdcan.c").read_text(encoding="utf-8")
+    c092_app_header = (C092_DIR / "uds_app_fdcan.h").read_text(encoding="utf-8")
+    c092_app_source = (C092_DIR / "uds_app_fdcan.c").read_text(encoding="utf-8")
     c092_profile = (C092_DIR / "uds_app_config.h").read_text(encoding="utf-8")
     c092_guide = (C092_DIR / "README.md").read_text(encoding="utf-8")
     c092_required_tokens = (
@@ -69,6 +71,7 @@ def main() -> int:
         "HAL_FDCAN_GetTxEvent",
         "isotp_config_set_padding",
         "0xCCU",
+        "uds_c092_app_init_default",
     )
     missing = [
         token
@@ -105,6 +108,12 @@ def main() -> int:
         raise SystemExit("generic endpoint must retain protocol-owned tx_pending and reset completion")
     if ("tx_pending" not in c092_header + c092_source) or ("FDCAN_TX_EVENT" not in c092_source):
         raise SystemExit("C092 FDCAN adapter must retain hardware-specific TX event state")
+    if ("uds_c092_app_init_default" not in c092_app_header + c092_app_source + c092_guide):
+        raise SystemExit("C092 application must provide a copy-ready default initializer")
+    if "uds_c092_app_init_default(&uds_transport" not in c092_guide:
+        raise SystemExit("C092 guide must show the default initializer call")
+    if "uds_c092_app_init(&uds_transport, uds_c092_platform_now_ms(),\n                  NULL, NULL, NULL, NULL);" not in c092_guide:
+        raise SystemExit("C092 guide must show the explicit NULL callback/context call")
 
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     if vectors.get("schema_version") != 1 or not vectors.get("vectors"):
