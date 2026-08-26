@@ -25,7 +25,8 @@ static const uint8_t sbox[256] = {
     0x68U, 0x41U, 0x99U, 0x2dU, 0x0fU, 0xb0U, 0x54U, 0xbbU, 0x16U};
 
 static uint8_t xtime(uint8_t value) {
-    return (uint8_t)((value << 1U) ^ (((value >> 7U) & 1U) * 0x1BU));
+    uint32_t wide_value = (uint32_t)value;
+    return (uint8_t)((wide_value << 1U) ^ (((wide_value >> 7U) & 1U) * 0x1BU));
 }
 
 static void add_round_key(uint8_t state[16], const uint8_t *round_key) {
