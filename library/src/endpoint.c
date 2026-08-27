@@ -72,14 +72,13 @@ static void abort_in_flight(UdsIsoTpEndpoint *endpoint) {
     uds_server_clear_reset(&endpoint->uds);
 }
 
-static void complete_in_flight(UdsIsoTpEndpoint *endpoint) {
+static void complete_in_flight(UdsIsoTpEndpoint *endpoint, uint32_t now_ms) {
     if ((endpoint == NULL) || !endpoint->tx_in_flight)
         return;
     endpoint->tx_in_flight = false;
     if (endpoint->in_flight_final && endpoint->in_flight_reset_completion) {
         reset_event(endpoint, UDS_RESET_EVENT_TX_COMPLETE);
-        if (uds_server_complete_reset(&endpoint->uds) == UDS_RESULT_OK)
-            reset_event(endpoint, UDS_RESET_EVENT_EXECUTED);
+        (void)uds_server_complete_reset_at(&endpoint->uds, now_ms);
     }
     endpoint->in_flight_final = false;
     endpoint->in_flight_reset_completion = false;
@@ -97,6 +96,7 @@ bool uds_isotp_endpoint_init(UdsIsoTpEndpoint *endpoint, const UdsIsoTpEndpointC
     isotp_rx_init(&endpoint->rx, &config->isotp_config, config->request_id, config->response_id);
     isotp_tx_init(&endpoint->tx, &config->isotp_config, config->request_id, config->response_id);
     uds_server_init(&endpoint->uds, &config->uds_callbacks, config->uds_context, now_ms);
+    uds_server_set_reset_guard(&endpoint->uds, config->reset_guard_ms);
     endpoint->tx_pending = false;
     endpoint->control_pending = false;
     endpoint->pending_reset_completion = false;
@@ -122,6 +122,9 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
             return ISOTP_OK;
         return isotp_tx_feed_flow_control(&endpoint->tx, frame, now_ms);
     }
+
+    if (uds_server_reset_pending(&endpoint->uds))
+        return ISOTP_OK;
 
     IsoTpCanFrame network_frame = *frame;
     UdsAddressMode address_mode = UDS_ADDRESS_PHYSICAL;
@@ -149,8 +152,7 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
     if (reset_completion)
         reset_event(endpoint, UDS_RESET_EVENT_REQUESTED);
     if (result == UDS_RESULT_NO_RESPONSE) {
-        if (reset_completion && (uds_server_complete_reset(&endpoint->uds) == UDS_RESULT_OK))
-            reset_event(endpoint, UDS_RESET_EVENT_EXECUTED);
+        (void)uds_server_complete_reset_at(&endpoint->uds, now_ms);
         return status;
     }
     if ((result != UDS_RESULT_OK) || (response_length == 0U))
@@ -189,7 +191,7 @@ IsoTpStatus uds_isotp_endpoint_process(UdsIsoTpEndpoint *endpoint, uint32_t now_
         endpoint->pending_reset_completion = false;
         if ((endpoint->config.tx_complete == NULL) ||
             endpoint->config.tx_complete(endpoint->config.context))
-            complete_in_flight(endpoint);
+            complete_in_flight(endpoint, now_ms);
         return ISOTP_TX_FRAME_READY;
     }
 
@@ -222,12 +224,18 @@ IsoTpStatus uds_isotp_endpoint_tick(UdsIsoTpEndpoint *endpoint, uint32_t now_ms)
         return ISOTP_ERR_ARGUMENT;
     IsoTpStatus rx_status = isotp_rx_tick(&endpoint->rx, now_ms);
     IsoTpStatus tx_status = isotp_tx_tick(&endpoint->tx, now_ms);
-    (void)uds_server_tick(&endpoint->uds, now_ms);
+    UdsResetState reset_state_before = uds_server_reset_state(&endpoint->uds);
+    UdsCallbackResult reset_status = uds_server_tick(&endpoint->uds, now_ms);
+    if ((reset_state_before == UDS_RESET_STATE_WAIT_GUARD) &&
+        (uds_server_reset_state(&endpoint->uds) == UDS_RESET_STATE_FAULT) &&
+        (reset_status == UDS_RESULT_ERROR))
+        reset_event(endpoint, UDS_RESET_EVENT_EXECUTED);
     return (rx_status != ISOTP_OK) ? rx_status : tx_status;
 }
 
 void uds_isotp_endpoint_tx_complete(UdsIsoTpEndpoint *endpoint) {
-    complete_in_flight(endpoint);
+    if ((endpoint != NULL) && (endpoint->config.clock_ms != NULL))
+        complete_in_flight(endpoint, endpoint->config.clock_ms(endpoint->config.context));
 }
 
 UdsServer *uds_isotp_endpoint_server(UdsIsoTpEndpoint *endpoint) {

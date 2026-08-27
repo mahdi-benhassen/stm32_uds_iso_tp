@@ -34,6 +34,7 @@ void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
     config.request_id = UDS_C092_REQUEST_ID;
     config.response_id = UDS_C092_RESPONSE_ID;
     config.functional_request_id = UDS_C092_FUNCTIONAL_REQUEST_ID;
+    config.reset_guard_ms = UDS_C092_RESET_GUARD_MS;
     if (application_callbacks != NULL)
         config.uds_callbacks = *application_callbacks;
     config.uds_callbacks.ecu_reset = uds_c092_platform_reset_prepare;

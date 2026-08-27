@@ -196,13 +196,18 @@ static void test_deferred_reset_and_full_duplex(void) {
            reset_sink.frames[0].data[1] == 0x51U && reset_sink.reset_calls == 0U);
     assert(uds_server_reset_pending(&reset_endpoint.uds));
     uds_isotp_endpoint_tx_complete(&reset_endpoint);
+    assert(reset_sink.reset_calls == 0U && reset_sink.reset_event_count == 4U &&
+           reset_sink.reset_events[3] == UDS_RESET_EVENT_TX_COMPLETE);
+    assert(uds_server_reset_pending(&reset_endpoint.uds));
+    assert(uds_isotp_endpoint_tick(&reset_endpoint, 0U) == ISOTP_OK);
     assert(reset_sink.reset_calls == 1U && reset_sink.reset_event_count == 5U &&
-           reset_sink.reset_events[3] == UDS_RESET_EVENT_TX_COMPLETE &&
            reset_sink.reset_events[4] == UDS_RESET_EVENT_EXECUTED);
     assert(!uds_server_reset_pending(&reset_endpoint.uds));
     uds_isotp_endpoint_tx_complete(&reset_endpoint);
     assert(reset_sink.reset_calls == 1U && reset_sink.reset_event_count == 5U);
 
+    assert(uds_isotp_endpoint_init(&reset_endpoint, &reset_config, 0U));
+    reset_sink.reset_event_count = 0U;
     reset_request.data[2] = 0x02U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 1U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_TX_FRAME_READY);
@@ -214,10 +219,12 @@ static void test_deferred_reset_and_full_duplex(void) {
     reset_request.data[1] = 0x11U;
     reset_request.data[2] = 0x81U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 2U) == ISOTP_COMPLETE);
-    assert(!reset_endpoint.tx_pending && reset_sink.reset_calls == 2U &&
-           reset_sink.reset_event_count == 7U &&
-           reset_sink.reset_events[5] == UDS_RESET_EVENT_REQUESTED &&
-           reset_sink.reset_events[6] == UDS_RESET_EVENT_EXECUTED);
+    assert(!reset_endpoint.tx_pending && reset_sink.reset_calls == 1U &&
+           reset_sink.reset_event_count == 1U &&
+           reset_sink.reset_events[0] == UDS_RESET_EVENT_REQUESTED);
+    assert(uds_isotp_endpoint_tick(&reset_endpoint, 2U) == ISOTP_OK);
+    assert(reset_sink.reset_calls == 2U && reset_sink.reset_event_count == 2U &&
+           reset_sink.reset_events[1] == UDS_RESET_EVENT_EXECUTED);
 
     Sink duplex_sink = {0};
     duplex_sink.response_size = 16U;

@@ -19,7 +19,7 @@ That invariant is now tested at the generic endpoint boundary with a deliberatel
 | Response staging | `library/src/endpoint.c:147–159`, `start_response()` | The response is marked as reset-bearing and staged for ISO-TP TX. |
 | ISO-TP TX | `library/src/endpoint.c:178–205` | The response frame is submitted; `tx_in_flight` becomes true. |
 | Physical completion boundary | `library/src/endpoint.c:189–192`, then `uds_isotp_endpoint_tx_complete()` | Queue acceptance is not completion. The configured callback must report the defined transport completion. |
-| Reset execution | `library/src/endpoint.c:75–87` and `uds_server_complete_reset()` | Only final-frame completion executes `ecu_reset_execute`; the reset callback is not invoked while TX is merely pending. |
+| Reset scheduling/execution | `library/src/endpoint.c:75–87`, `uds_server_complete_reset_at()`, and `uds_server_tick()` | Final-frame completion only schedules the reset; the platform callback is invoked once from the mainline tick after the configured non-blocking guard. |
 | Reboot | Application-owned reset callback | A real MCU reset must rerun the complete application initialization. |
 | First request after reboot | Reinitialized endpoint receives `10 01` | UDS starts in default session and produces `50 01`. |
 
@@ -29,7 +29,7 @@ The reporter archive and the maintained endpoint both carried `tx_reset_completi
 
 That left the endpoint’s reset-bearing TX marker asserted after the completion callback had already executed the reset action. A later endpoint reuse without a full object reinitialization could therefore inherit stale reset-completion state. The new correction clears `tx_reset_completion` at the same completion boundary as the other in-flight fields. TX-error abort already cleared this marker, and full `uds_isotp_endpoint_init()` also cleared it; the missing path was successful delayed completion.
 
-The new regression `library/tests/uds/test_ecu_reset_lifecycle.c` fails against the reporter-era implementation at the post-completion clean-state assertion and passes after the correction. It also asserts `reset_count == 0` while the final `51 01` frame is only queued/in flight, releases TX completion explicitly, then asserts exactly one reset execution. It reinitializes the endpoint and sends `10 01` with no inserted delay, verifying `50 01` for 100 cycles.
+The new regression `library/tests/uds/test_ecu_reset_lifecycle.c` fails against the reporter-era implementation at the post-completion clean-state assertion and passes after the correction. It asserts `reset_count == 0` while the final `51 01` frame is only queued/in flight, releases TX completion explicitly, verifies the reset enters `WAIT_GUARD`, checks that a five-millisecond guard is non-blocking, and then asserts exactly one mainline reset execution. It reinitializes the endpoint and sends `10 01` without an artificial post-reset delay, verifying `50 01` for 100 cycles.
 
 This is a real generic lifecycle defect. It is not a claim that the stale marker alone proves the reporter’s physical C092 failure: a correctly functioning `NVIC_SystemReset()` normally clears RAM by rebooting the MCU. The reporter’s exact hardware stop point still requires board instrumentation. The defect is nevertheless important because the endpoint contract must be correct when reset callbacks return in tests, when a platform reset is deferred or intercepted, and whenever the endpoint object is reused by a supervisory application.
 
@@ -43,7 +43,7 @@ The C092 mock and host tests remain useful but are not substitutes for this gene
 
 ## Validation status and limits
 
-The new generic test covers 100 cycles of `11 01 → 51 01 → delayed TX completion → reset execution → immediate 10 01 → 50 01`. It asserts clean RX/TX/UDS/reset state after each completion and reinitialization. Normal and sanitizer CTest, target-oriented checks, and CI remain required after integration.
+The new generic test covers 100 cycles of `11 01 → 51 01 → delayed TX completion → non-blocking reset guard → reset execution → immediate model reinitialization → 10 01 → 50 01`. It asserts clean RX/TX/UDS/reset state after each completion and reinitialization. Normal and sanitizer CTest, target-oriented checks, and CI remain required after integration.
 
 This review does not claim a Keil/Arm Compiler 6 build, STM32C092 flash, CAN-analyzer trace, reset-cause capture, measured reset-to-ready timing, or 100 physical cycles. Issue #19 should remain open until that evidence exists.
 

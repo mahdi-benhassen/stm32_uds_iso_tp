@@ -33,6 +33,8 @@ typedef struct {
     uint32_t request_id;
     uint32_t response_id;
     uint32_t functional_request_id;
+    /* Non-blocking guard after confirmed response TX; zero preserves immediate next-tick execution. */
+    uint32_t reset_guard_ms;
     UdsCallbacks uds_callbacks;
     void *uds_context;
 } UdsIsoTpEndpointConfig;

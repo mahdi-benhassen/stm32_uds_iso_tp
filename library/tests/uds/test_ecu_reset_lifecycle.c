@@ -10,6 +10,7 @@ typedef struct {
     uint16_t frame_count;
     uint16_t reset_count;
     bool tx_complete_release;
+    uint32_t now_ms;
 } ResetLifecycleBus;
 
 static bool send_frame(void *context, const IsoTpCanFrame *frame) {
@@ -26,8 +27,8 @@ static bool tx_complete(void *context) {
 }
 
 static uint32_t clock_ms(void *context) {
-    (void)context;
-    return 0U;
+    ResetLifecycleBus *bus = (ResetLifecycleBus *)context;
+    return (bus != NULL) ? bus->now_ms : 0U;
 }
 
 static UdsCallbackResult reset_prepare(void *context, uint8_t subfunction) {
@@ -51,6 +52,7 @@ static UdsIsoTpEndpointConfig make_config(ResetLifecycleBus *bus) {
     config.context = bus;
     config.request_id = 0x7E0U;
     config.response_id = 0x7E8U;
+    config.reset_guard_ms = 5U;
     config.uds_callbacks.ecu_reset = reset_prepare;
     config.uds_callbacks.ecu_reset_execute = reset_execute;
     config.uds_context = bus;
@@ -94,6 +96,7 @@ static void test_ecu_reset_transaction_lifecycle(void) {
 
     for (uint16_t cycle = 0U; cycle < 100U; ++cycle) {
         bus.tx_complete_release = false;
+        bus.now_ms = cycle;
         IsoTpCanFrame reset_frame = request_frame(reset_request, 3U);
         assert(uds_isotp_endpoint_receive(&endpoint, &reset_frame, cycle) == ISOTP_TX_FRAME_READY);
         assert(uds_isotp_endpoint_process(&endpoint, cycle) == ISOTP_TX_FRAME_READY);
@@ -104,22 +107,31 @@ static void test_ecu_reset_transaction_lifecycle(void) {
         assert(bus.reset_count == cycle);
         assert(endpoint.tx_in_flight);
         assert(uds_server_reset_pending(&endpoint.uds));
+        assert(uds_isotp_endpoint_receive(&endpoint, &reset_frame, cycle) == ISOTP_OK);
+        assert(bus.frame_count == (uint16_t)(cycle * 2U + 1U));
 
         /* Queue acceptance and TX completion are deliberately separate. */
         bus.tx_complete_release = true;
+        bus.now_ms = cycle;
         uds_isotp_endpoint_tx_complete(&endpoint);
+        assert(bus.reset_count == cycle);
+        assert(uds_server_reset_state(&endpoint.uds) == UDS_RESET_STATE_WAIT_GUARD);
+        bus.now_ms = (uint32_t)(cycle + 4U);
+        assert(uds_isotp_endpoint_tick(&endpoint, bus.now_ms) == ISOTP_OK);
+        assert(bus.reset_count == cycle);
+        bus.now_ms = (uint32_t)(cycle + 5U);
+        assert(uds_isotp_endpoint_tick(&endpoint, bus.now_ms) == ISOTP_OK);
         assert(bus.reset_count == (uint16_t)(cycle + 1U));
-        assert_endpoint_clean(&endpoint);
 
         /* Model the MCU reboot: all endpoint and UDS state is initialized again. */
-        assert(uds_isotp_endpoint_init(&endpoint, &config, (uint32_t)(cycle + 1U)));
+        assert(uds_isotp_endpoint_init(&endpoint, &config, (uint32_t)(cycle + 6U)));
         assert_endpoint_clean(&endpoint);
 
         /* No delay is inserted before the first post-reset request. */
         IsoTpCanFrame session_frame = request_frame(session_request, 3U);
-        assert(uds_isotp_endpoint_receive(&endpoint, &session_frame, (uint32_t)(cycle + 1U)) ==
+        assert(uds_isotp_endpoint_receive(&endpoint, &session_frame, (uint32_t)(cycle + 6U)) ==
                ISOTP_TX_FRAME_READY);
-        assert(uds_isotp_endpoint_process(&endpoint, (uint32_t)(cycle + 1U)) ==
+        assert(uds_isotp_endpoint_process(&endpoint, (uint32_t)(cycle + 6U)) ==
                ISOTP_TX_FRAME_READY);
         assert(bus.frame_count == (uint16_t)(cycle * 2U + 2U));
         assert(bus.frames[bus.frame_count - 1U].data[1] == 0x50U);

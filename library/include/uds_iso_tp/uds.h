@@ -26,6 +26,9 @@
 #ifndef UDS_DEFAULT_P2_STAR_SERVER_MS
 #define UDS_DEFAULT_P2_STAR_SERVER_MS 5000U
 #endif
+#ifndef UDS_DEFAULT_RESET_GUARD_MS
+#define UDS_DEFAULT_RESET_GUARD_MS 0U
+#endif
 
 #ifndef UDS_DEFAULT_S3_SERVER_MS
 #define UDS_DEFAULT_S3_SERVER_MS 5000U
@@ -173,6 +176,14 @@ typedef enum {
 typedef enum { UDS_RESET_NORMAL = 0, UDS_RESET_PROGRAMMING } UdsResetReason;
 
 typedef enum {
+    UDS_RESET_STATE_IDLE = 0,
+    UDS_RESET_STATE_WAIT_TX_COMPLETE,
+    UDS_RESET_STATE_WAIT_GUARD,
+    UDS_RESET_STATE_EXECUTE,
+    UDS_RESET_STATE_FAULT
+} UdsResetState;
+
+typedef enum {
     UDS_RESET_TYPE_HARD = 0x01U,
     UDS_RESET_TYPE_KEY_OFF_ON = 0x02U,
     UDS_RESET_TYPE_SOFT = 0x03U,
@@ -273,6 +284,9 @@ typedef struct {
     bool security_seed_valid;
     UdsResetReason pending_reset_reason;
     uint8_t pending_reset_subfunction;
+    UdsResetState reset_state;
+    uint32_t reset_guard_start_ms;
+    uint32_t reset_guard_ms;
     uint8_t next_download_block;
     uint16_t max_download_block_length;
     uint16_t p2_server_ms;
@@ -305,7 +319,11 @@ UdsCallbackResult uds_server_request_session(UdsServer *server, uint8_t requeste
                                              uint32_t now_ms);
 UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms);
 bool uds_server_reset_pending(const UdsServer *server);
+UdsResetState uds_server_reset_state(const UdsServer *server);
+void uds_server_set_reset_guard(UdsServer *server, uint32_t guard_ms);
+UdsCallbackResult uds_server_complete_reset_at(UdsServer *server, uint32_t now_ms);
 UdsCallbackResult uds_server_complete_reset(UdsServer *server);
+UdsCallbackResult uds_server_poll_reset(UdsServer *server, uint32_t now_ms);
 void uds_server_clear_reset(UdsServer *server);
 uint8_t uds_server_session(const UdsServer *server);
 UdsSecurityState uds_server_security_state(const UdsServer *server);

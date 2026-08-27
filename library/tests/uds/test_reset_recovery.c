@@ -105,6 +105,8 @@ static void test_reset_and_post_reset_services(void) {
     assert(uds_isotp_endpoint_receive(&endpoint, &reset_frame, 0U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
     assert(bus.last_frame.data[1] == 0x51U && bus.last_frame.data[2] == 0x01U);
+    assert(bus.reset_count == 0U);
+    assert(uds_isotp_endpoint_tick(&endpoint, 0U) == ISOTP_OK);
     assert(bus.reset_count == 1U);
 
     reinitialize_after_reset(&endpoint, &bus, 1U);
@@ -144,6 +146,7 @@ static void test_one_hundred_reset_cycles_and_one_thousand_requests(void) {
         IsoTpCanFrame reset_frame = request_frame(reset_request, 3U);
         assert(uds_isotp_endpoint_receive(&endpoint, &reset_frame, cycle) == ISOTP_TX_FRAME_READY);
         assert(uds_isotp_endpoint_process(&endpoint, cycle) == ISOTP_TX_FRAME_READY);
+        assert(uds_isotp_endpoint_tick(&endpoint, cycle) == ISOTP_OK);
         reinitialize_after_reset(&endpoint, &bus, (uint32_t)(cycle + 1U));
         for (uint8_t request = 0U; request < 10U; ++request)
             expect_single_response(&endpoint, &bus, tester_present, 3U, 0x7EU,

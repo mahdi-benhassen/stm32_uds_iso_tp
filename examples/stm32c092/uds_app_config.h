@@ -7,4 +7,9 @@
 #define UDS_C092_FUNCTIONAL_REQUEST_ID 0x7DFU
 #define UDS_C092_RESPONSE_ID 0x7E8U
 
+/* Keep zero until a board-specific reset-to-ready measurement justifies an override. */
+#ifndef UDS_C092_RESET_GUARD_MS
+#define UDS_C092_RESET_GUARD_MS 0U
+#endif
+
 #endif

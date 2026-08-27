@@ -233,6 +233,8 @@ static void test_ecu_reset_response_and_exactly_once_execution(void) {
     assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
     assert(bus.frame_count == 1U && bus.frames[0].dlc == 3U && bus.frames[0].data[0] == 0x02U &&
            bus.frames[0].data[1] == 0x51U && bus.frames[0].data[2] == 0x01U);
+    assert(reset_execute_count == 0U);
+    assert(uds_isotp_endpoint_tick(&endpoint, 0U) == ISOTP_OK);
     assert(reset_execute_count == 1U);
     uds_isotp_endpoint_tx_complete(&endpoint);
     assert(reset_execute_count == 1U);
