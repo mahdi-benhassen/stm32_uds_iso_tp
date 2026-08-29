@@ -140,19 +140,19 @@ The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages,
 
 The trace counters expose `fdcan_rx_count`, `rx_accepted_count`, `rx_rejected_not_initialized_count`, `isotp_rx_count`, `uds_request_count`, `uds_response_count`, `fdcan_tx_count`, and rejected/dropped/overflowed RX counts. These counters are bounded-width monotonic counters that reset with the MCU and are suitable for a debugger or a project-owned diagnostic readout. They are evidence aids, not a replacement for timestamped CAN-analyzer traces.
 
-The reset sequence remains transport-completion-driven and is explicitly asynchronous:
+The reset sequence uses a simple application-owned pending flag:
 
 ```text
-11 xx -> UDS validation -> 51 xx response ready -> FDCAN submission
-      -> matching transport completion -> WAIT_RESET_GUARD
-      -> mainline uds_isotp_endpoint_tick() -> platform reset callback
-      -> NVIC_SystemReset()
+11 xx -> UDS validation -> reset_pending = true
+      -> 51 xx response ready -> FDCAN submission
+      -> response path complete -> return to mainline
+      -> uds_server_tick() observes reset_ready
+      -> HAL_Delay(5 ms) in the C092 platform callback
+      -> platform reset callback -> NVIC_SystemReset()
       -> complete HAL/FDCAN/UDS startup -> DIAGNOSTIC_READY
       -> next tester request
 ```
 
-`UdsIsoTpEndpointConfig.reset_guard_ms` is a non-blocking, application-owned guard after confirmed response completion. It defaults to zero; a non-zero value must be selected from measured platform requirements rather than copied as a generic 50 ms delay. The application main loop must continue calling `uds_c092_app_process()`, which drives the endpoint tick and reset poll. While a reset is pending, subsequent diagnostic requests are not dispatched by the endpoint.
-
-`HAL_FDCAN_AddMessageToTxFifoQ() == HAL_OK` means controller queue acceptance only. It is not the physical completion boundary used by the maintained C092 ECUReset path. No `HAL_Delay()` is required or permitted in the generic library or the ISR path.
+The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback owns the final 5 ms handoff before `NVIC_SystemReset()`. The 5 ms handoff is not the measured reset-to-diagnostic-ready interval, and the tester must wait for `DIAGNOSTIC_READY` before sending the next request.
 
 The maintained adapter accepts only the configured standard physical request ID and optional functional request ID at the application handoff. The generated FDCAN filter should be narrower than the reporter’s broad range filter, normally accepting the configured `0x7E0` physical request and `0x7DF` functional request only when functional addressing is intentionally enabled. Standard data frames are required; unrelated IDs, extended IDs, and remote frames should be rejected by the generated filter/global-filter configuration.

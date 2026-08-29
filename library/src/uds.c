@@ -333,9 +333,6 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     server->security_seed_expiry_ms = 0U;
     server->pending_reset_reason = UDS_RESET_NORMAL;
     server->pending_reset_subfunction = 0U;
-    server->reset_state = UDS_RESET_STATE_IDLE;
-    server->reset_guard_start_ms = 0U;
-    server->reset_guard_ms = UDS_DEFAULT_RESET_GUARD_MS;
     server->next_download_block = 1U;
     server->max_download_block_length = 0U;
     server->p2_server_ms = UDS_DEFAULT_P2_SERVER_MS;
@@ -344,6 +341,7 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     server->last_activity_ms = now_ms;
     server->download_active = false;
     server->reset_pending = false;
+    server->reset_ready = false;
     server->dtc_setting_enabled = true;
 }
 
@@ -363,10 +361,9 @@ void uds_server_apply_reset(UdsServer *server, UdsResetReason reason, uint32_t n
     server->next_download_block = 1U;
     server->max_download_block_length = 0U;
     server->reset_pending = false;
+    server->reset_ready = false;
     server->pending_reset_reason = UDS_RESET_NORMAL;
     server->pending_reset_subfunction = 0U;
-    server->reset_state = UDS_RESET_STATE_IDLE;
-    server->reset_guard_start_ms = 0U;
     server->last_activity_ms = now_ms;
     security_reset_for_ecu_reset(server, now_ms, reason);
 }
@@ -476,14 +473,6 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
-    if (server->reset_state == UDS_RESET_STATE_FAULT) {
-        return negative_response(request, UDS_NRC_CONDITIONS_NOT_CORRECT, response, response_len,
-                                 capacity);
-    }
-    if (server->reset_pending) {
-        return negative_response(request, UDS_NRC_BUSY_REPEAT_REQUEST, response, response_len,
-                                 capacity);
-    }
     uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
     if ((subfunction < UDS_RESET_TYPE_HARD) ||
         (subfunction > UDS_RESET_TYPE_DISABLE_RAPID_POWER_SHUTDOWN) ||
@@ -497,9 +486,9 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
     }
     if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
         server->reset_pending = true;
+        server->reset_ready = false;
         server->pending_reset_reason = UDS_RESET_NORMAL;
         server->pending_reset_subfunction = subfunction;
-        server->reset_state = UDS_RESET_STATE_WAIT_TX_COMPLETE;
         return UDS_RESULT_NO_RESPONSE;
     }
     if (capacity < 2U) {
@@ -510,9 +499,9 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
     response[1] = subfunction;
     *response_len = 2U;
     server->reset_pending = true;
+    server->reset_ready = false;
     server->pending_reset_reason = UDS_RESET_NORMAL;
     server->pending_reset_subfunction = subfunction;
-    server->reset_state = UDS_RESET_STATE_WAIT_TX_COMPLETE;
     return UDS_RESULT_OK;
 #else
     (void)server;
@@ -1150,18 +1139,15 @@ UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms) {
         return UDS_RESULT_ERROR;
     }
     security_tick(server, now_ms);
-    if (server->reset_state == UDS_RESET_STATE_WAIT_GUARD) {
-        if ((uint32_t)(now_ms - server->reset_guard_start_ms) >= server->reset_guard_ms) {
-            server->reset_state = UDS_RESET_STATE_EXECUTE;
-            return uds_server_poll_reset(server, now_ms);
-        }
+    if (server->reset_pending && server->reset_ready) {
+        uint8_t subfunction = server->pending_reset_subfunction;
+        server->reset_pending = false;
+        server->reset_ready = false;
+        server->pending_reset_reason = UDS_RESET_NORMAL;
+        server->pending_reset_subfunction = 0U;
+        if (server->callbacks.ecu_reset_execute != NULL)
+            server->callbacks.ecu_reset_execute(server->context, subfunction);
         return UDS_RESULT_OK;
-    }
-    if (server->reset_state == UDS_RESET_STATE_EXECUTE) {
-        return uds_server_poll_reset(server, now_ms);
-    }
-    if (server->reset_state == UDS_RESET_STATE_FAULT) {
-        return UDS_RESULT_ERROR;
     }
     if ((uint32_t)(now_ms - server->last_activity_ms) >= server->s3_server_timeout_ms) {
         server->session = UDS_SESSION_DEFAULT;
@@ -1202,59 +1188,23 @@ bool uds_server_reset_pending(const UdsServer *server) {
     return (server != NULL) && server->reset_pending;
 }
 
-UdsResetState uds_server_reset_state(const UdsServer *server) {
-    return (server != NULL) ? server->reset_state : UDS_RESET_STATE_FAULT;
-}
-
-void uds_server_set_reset_guard(UdsServer *server, uint32_t guard_ms) {
-    if (server != NULL)
-        server->reset_guard_ms = guard_ms;
-}
-
-UdsCallbackResult uds_server_complete_reset_at(UdsServer *server, uint32_t now_ms) {
+UdsCallbackResult uds_server_complete_reset(UdsServer *server) {
     if (server == NULL)
         return UDS_RESULT_ERROR;
-    if (!server->reset_pending || (server->reset_state != UDS_RESET_STATE_WAIT_TX_COMPLETE))
+    if (!server->reset_pending)
         return UDS_RESULT_SEQUENCE_ERROR;
     if (server->callbacks.ecu_reset_execute == NULL)
         return UDS_RESULT_NOT_SUPPORTED;
-    server->reset_state = UDS_RESET_STATE_WAIT_GUARD;
-    server->reset_guard_start_ms = now_ms;
+    server->reset_ready = true;
     return UDS_RESULT_OK;
-}
-
-UdsCallbackResult uds_server_complete_reset(UdsServer *server) {
-    return uds_server_complete_reset_at(server, 0U);
-}
-
-UdsCallbackResult uds_server_poll_reset(UdsServer *server, uint32_t now_ms) {
-    if (server == NULL)
-        return UDS_RESULT_ERROR;
-    if (server->reset_state != UDS_RESET_STATE_EXECUTE)
-        return UDS_RESULT_SEQUENCE_ERROR;
-    if (server->callbacks.ecu_reset_execute == NULL) {
-        server->reset_state = UDS_RESET_STATE_FAULT;
-        return UDS_RESULT_NOT_SUPPORTED;
-    }
-    uint8_t subfunction = server->pending_reset_subfunction;
-    server->reset_pending = false;
-    server->pending_reset_reason = UDS_RESET_NORMAL;
-    server->pending_reset_subfunction = 0U;
-    server->reset_guard_start_ms = 0U;
-    server->callbacks.ecu_reset_execute(server->context, subfunction);
-    /* A real platform reset callback is expected not to return. */
-    server->reset_state = UDS_RESET_STATE_FAULT;
-    server->last_activity_ms = now_ms;
-    return UDS_RESULT_ERROR;
 }
 
 void uds_server_clear_reset(UdsServer *server) {
     if (server != NULL) {
         server->reset_pending = false;
+        server->reset_ready = false;
         server->pending_reset_reason = UDS_RESET_NORMAL;
         server->pending_reset_subfunction = 0U;
-        server->reset_state = UDS_RESET_STATE_IDLE;
-        server->reset_guard_start_ms = 0U;
     }
 }
 

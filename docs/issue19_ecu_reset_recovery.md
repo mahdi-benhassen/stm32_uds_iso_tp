@@ -85,12 +85,11 @@ The following software evidence is available:
 
 | Check | Result |
 |---|---|
-| Standalone host contracts | **14/14 passed** after the UDS lifecycle correction. |
-| ASan/UBSan host suite | **14/14 passed** after the UDS lifecycle correction; no hardware claim follows from it. |
+| Standalone host contracts | **13/13 passed** after the readiness/mailbox correction. |
+| ASan/UBSan host suite | **13/13 passed** after the readiness/mailbox correction; no hardware claim follows from it. |
 | Reset recovery contract | 100 reset cycles with 10 normal requests per cycle, totaling 1,000 post-reset requests in the host model. |
 | Service sequence contract | Post-reset `0x10`, `0x22` with multi-frame response, `0x3E`, invalid request recovery, and subsequent valid request. |
 | Endpoint safety contract | ECUReset configuration without `tx_complete` is rejected. |
-| UDS ECUReset lifecycle contract | Delayed TX completion cannot execute reset early; the reset marker clears after completion; endpoint/UDS state is clean after reinitialization; 100 immediate post-reset `10 01 → 50 01` cycles pass. |
 | C092 diagnostic contract | Readiness ordering, pre-initialization rejection, post-start mailbox acceptance/full handling, fault state, reset reinitialization, and lifecycle counters. |
 | C092 portability | **Passed** against the supplied reporter HAL headers after the final source changes. |
 

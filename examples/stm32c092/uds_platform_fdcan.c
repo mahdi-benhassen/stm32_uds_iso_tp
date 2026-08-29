@@ -19,8 +19,10 @@ UdsCallbackResult uds_c092_platform_reset_prepare(void *context, uint8_t subfunc
 
 void uds_c092_platform_reset_execute(void *context, uint8_t subfunction) {
     (void)context;
-    if ((subfunction == UDS_RESET_TYPE_HARD) || (subfunction == UDS_RESET_TYPE_SOFT))
+    if ((subfunction == UDS_RESET_TYPE_HARD) || (subfunction == UDS_RESET_TYPE_SOFT)) {
+        HAL_Delay(5U);
         uds_c092_platform_system_reset(subfunction);
+    }
 }
 
 void uds_c092_platform_system_reset(uint8_t reset_type) {

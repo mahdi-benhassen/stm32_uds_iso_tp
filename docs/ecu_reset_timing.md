@@ -1,6 +1,6 @@
 # ECUReset Timing Contract
 
-This document defines the software ordering for UDS ECUReset on the STM32C092 FDCAN Classical CAN profile. It does not invent a fixed delay and does not claim a measured hardware interval until a board and analyzer campaign is completed.
+This document defines the software ordering for UDS ECUReset on the STM32C092 FDCAN Classical CAN profile. ECUReset arms a pending flag; the UDS service and CAN path do not execute the MCU reset. The application mainline performs the platform reset handoff. The current C092 example uses a 5 ms application-owned handoff before `NVIC_SystemReset()`; this value is not a measured reset-to-diagnostic-ready interval.
 
 ```text
 Tester                         ECU / C092 platform
@@ -10,9 +10,10 @@ Tester                         ECU / C092 platform
   |                                  | positive response 51 xx prepared
   |                                  | ISO-TP response submitted
   |<-------- 51 xx ------------------|
-  |                                  | transport-defined TX completion
-  |                                  | WAIT_RESET_GUARD (non-blocking)
-  |                                  | mainline reset poll
+  |                                  | reset_pending = true
+  |                                  | return to application mainline
+  |                                  | reset_ready after response path
+  |                                  | C092 HAL_Delay(5 ms)
   |                                  | platform reset executor
   |                                  | NVIC_SystemReset()
   |                                  |-------------------->
@@ -31,7 +32,7 @@ Tester                         ECU / C092 platform
 
 ## Software invariants
 
-The response must be generated before reset execution. Queue acceptance is not automatically physical completion. A C092 implementation must provide a transport completion callback; the maintained adapter uses a matching stored TX Event FIFO record. After the completion callback confirms the final response, the generic library enters a non-blocking reset-guard state and executes the platform callback from the mainline tick path. The default guard is zero milliseconds, so the reset occurs on the next eligible tick unless the application configures a measured guard interval. If the completion callback reports an error, reset execution is not performed and the endpoint clears the failed in-flight state.
+The response must be generated before reset execution. ECUReset is only marked ready after the response path has completed; reset execution itself occurs from the application mainline tick. The generic library does not call `HAL_Delay()` and contains no STM32-specific reset code. The C092 platform callback owns its 5 ms handoff and then calls `NVIC_SystemReset()`.
 
 After `NVIC_SystemReset()`, all board-owned initialization must run again. The platform should mark `UDS_C092_DIAG_READY` only after HAL, clock, GPIO, FDCAN initialization, filters, required notifications, FDCAN start, transport initialization, and UDS endpoint initialization have succeeded.
 
@@ -39,15 +40,13 @@ After FDCAN start and RX-notification activation, valid frames are captured in t
 
 ## Measurement record
 
-While ECUReset is pending, the endpoint does not dispatch subsequent diagnostic requests; this prevents a second request from racing with an already accepted reset operation. The tester must wait for the platform’s post-reset diagnostic-ready indication before sending the next request. This is a readiness/boot contract, not a P2_server_max delay.
-
 The required hardware measurement is:
 
 ```text
 ECU_RESET_TO_DIAGNOSTIC_READY_TIME = DIAGNOSTIC_READY_timestamp - MCU_reset_timestamp
 ```
 
-The repository currently has no physical measurement. The board campaign must record the MCU, firmware SHA, compiler version, CAN nominal bit rate, transceiver, analyzer, timestamp source, and raw trace. The startup-race experiment may compare measured guard/readiness strategies, including wait-until-ready timing. A fixed delay must not be adopted merely because one delay appears to work.
+The repository currently has no physical measurement. The board campaign must record the MCU, firmware SHA, compiler version, CAN nominal bit rate, transceiver, analyzer, timestamp source, and raw trace. The startup-race experiment must compare immediate request, the C092 5 ms handoff, measured reset-to-ready timing, and wait-until-ready timing. The 5 ms pre-reset handoff must not be confused with diagnostic readiness and must not be treated as physical proof until measured on the target board.
 
 ## Required acceptance sequence
 
