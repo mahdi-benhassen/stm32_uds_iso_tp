@@ -28,7 +28,7 @@ bool uds_can_transport_send(void *context, const IsoTpCanFrame *frame) {
     uint32_t mailbox = 0U;
     if (HAL_CAN_AddTxMessage(transport->hcan, &header, (uint8_t *)frame->data, &mailbox) != HAL_OK)
         return false;
-    transport->tx_mailbox_mask |= 1UL << mailbox;
+    transport->tx_mailbox_mask |= mailbox;
     return true;
 }
 

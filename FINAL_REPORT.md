@@ -45,6 +45,12 @@ The cleaned STM32F767 root target was cross-built successfully with `arm-none-ea
 
 A host or cross-build does not prove electrical signaling, transceiver behavior, target interrupt latency, message-RAM configuration, bus-off recovery, EMC performance, production cryptography, authenticated firmware activation, Flash power-loss behavior, or formal ISO conformance. The FDCAN example remains an adapter contract and requires a concrete FDCAN-capable STM32 board project for physical CAN-FD HIL.
 
+## Industrial Standards Compliance & Remediation Audit
+
+A full architectural review across ISO 15765-2, ISO 14229-1, STM32 HAL, and MISRA C was completed. All identified hardware defects (bxCAN filter bank deafness, mailbox bitmask arithmetic, RX concurrency overwrite) and protocol standard defects (functional multi-frame rejection, functional NRC suppression per Table A.1, extended First Frame escape validation, SID 0x2E integration, unlocked zero-seed response, RequestDownload DFI parameter alignment, and SPRMIB handling) have been completely resolved and validated.
+
+The full technical audit and line-by-line remediation record is documented in [`docs/conformance/INDUSTRIAL_REMEDIATION_REPORT.md`](docs/conformance/INDUSTRIAL_REMEDIATION_REPORT.md).
+
 ## Issue status
 
 Issue #2 is the governing cleanup request. The cleanup commit is published and hosted CI verifies the final clean checkout; the issue remains open for maintainer review rather than being closed automatically. Issue #16 in the original `stm32_canopen_reference` repository remains independent and unchanged; its freeze and production-evidence status are not altered by this standalone cleanup.

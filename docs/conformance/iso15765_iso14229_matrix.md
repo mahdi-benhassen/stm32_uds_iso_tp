@@ -30,7 +30,7 @@ The project therefore reports four evidence classes:
 | TP-011 | Flow Control addressing | FC CAN-ID validation against configured peer ID | `HOST-COVERED` | Verify acceptance/rejection on a shared physical bus |
 | TP-012 | Frame validity | PCI and profile-specific DLC validation, including malformed Classical CAN and CAN-FD cases | `HOST-COVERED` | Run malformed-frame injection on target |
 | TP-013 | Timing limits | TX/RX timeout tests and bounded state aborts | `HOST-COVERED` | Measure deadline behavior with target clock and bus load |
-| TP-014 | Addressing modes | Normal 11-bit diagnostic identifiers are implemented; extended, mixed, and functional addressing are not claimed | `REVIEW-REQUIRED` | Select addressing requirements for the product and add a separate matrix |
+| TP-014 | Addressing modes | Normal 11-bit physical and functional addressing implemented; functional requests enforce SF-only reception per ISO 15765-2 Clause 7.3 and suppress NRCs per ISO 14229-1 Table A.1 | `HOST-COVERED` | Select extended or mixed addressing if required by OEM |
 | TP-015 | Network-layer service semantics | Callback endpoint exposes frame ingress/egress and timing; physical conformance is not implied | `REVIEW-REQUIRED` | Reconcile service primitives against the applicable ISO edition |
 
 ## ISO 14229-1 UDS matrix
@@ -52,6 +52,7 @@ The project therefore reports four evidence classes:
 | UDS-013 | Negative response behavior | Unsupported service, unsupported DID, callback errors, and bounded response handling | `HOST-COVERED` | Complete product NRC mapping review |
 | UDS-014 | Transport composition | UDS endpoint is composed above ISO-TP with non-blocking send retry and deferred processing | `TARGET-CROSS-BUILD` | Execute full request/response traces on both target profiles |
 | UDS-015 | Data-link independence | UDS callbacks do not include vendor HAL or another protocol stack | `HOST-COVERED` | Review application callback ownership for each product |
+| UDS-016 | Write Data by Identifier (`0x2E`) | Callback DID write, positive response, bounds checking, and session/security gating | `HOST-COVERED` | Define writable DID ranges and persistent storage policy |
 
 ## Physical evidence package
 

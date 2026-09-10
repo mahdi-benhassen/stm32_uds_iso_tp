@@ -130,8 +130,13 @@ bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *i
     if ((level == NULL) || (is_seed == NULL)) {
         return false;
     }
-    switch (subfunction) {
+    uint8_t raw = (uint8_t)(subfunction & 0x7FU);
+    bool sprmib = (subfunction & 0x80U) != 0U;
+    switch (raw) {
     case UDS_SECURITY_REQUEST_SEED_LEVEL_1:
+        if (sprmib) {
+            return false;
+        }
         *level = UDS_SECURITY_LEVEL_1;
         *is_seed = true;
         return true;
@@ -140,6 +145,9 @@ bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *i
         *is_seed = false;
         return true;
     case UDS_SECURITY_REQUEST_SEED_LEVEL_2:
+        if (sprmib) {
+            return false;
+        }
         *level = UDS_SECURITY_LEVEL_2;
         *is_seed = true;
         return true;
@@ -148,6 +156,9 @@ bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *i
         *is_seed = false;
         return true;
     case UDS_SECURITY_REQUEST_SEED_LEVEL_3:
+        if (sprmib) {
+            return false;
+        }
         *level = UDS_SECURITY_LEVEL_3;
         *is_seed = true;
         return true;
@@ -156,6 +167,9 @@ bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *i
         *is_seed = false;
         return true;
     case UDS_SECURITY_REQUEST_SEED_LEVEL_4:
+        if (sprmib) {
+            return false;
+        }
         *level = UDS_SECURITY_LEVEL_4;
         *is_seed = true;
         return true;
@@ -164,6 +178,9 @@ bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *i
         *is_seed = false;
         return true;
     case UDS_SECURITY_REQUEST_SEED_LEVEL_5:
+        if (sprmib) {
+            return false;
+        }
         *level = UDS_SECURITY_LEVEL_5;
         *is_seed = true;
         return true;
@@ -267,8 +284,24 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
     }
 }
 
+static const UdsServer *s_current_server = NULL;
+
+static bool nrc_suppressed_on_functional(uint8_t nrc) {
+    return (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED) ||
+           (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED) ||
+           (nrc == UDS_NRC_REQUEST_OUT_OF_RANGE) ||
+           (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION) ||
+           (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+}
+
 static UdsCallbackResult negative_response(const uint8_t *request, uint8_t nrc, uint8_t *response,
                                            uint16_t *response_len, uint16_t capacity) {
+    if ((s_current_server != NULL) &&
+        (s_current_server->current_address_mode == UDS_ADDRESS_FUNCTIONAL) &&
+        nrc_suppressed_on_functional(nrc)) {
+        *response_len = 0U;
+        return UDS_RESULT_NO_RESPONSE;
+    }
     if (capacity < 3U) {
         return UDS_RESULT_RESPONSE_TOO_LONG;
     }
@@ -285,6 +318,10 @@ static UdsCallbackResult callback_result(UdsServer *server, UdsCallbackResult re
     (void)server;
     if (result == UDS_RESULT_OK) {
         return UDS_RESULT_OK;
+    }
+    if (result == UDS_RESULT_NO_RESPONSE) {
+        *response_len = 0U;
+        return UDS_RESULT_NO_RESPONSE;
     }
     return negative_response(request, result_to_nrc(result), response, response_len, capacity);
 }
@@ -343,6 +380,7 @@ void uds_server_init(UdsServer *server, const UdsCallbacks *callbacks, void *con
     server->reset_pending = false;
     server->reset_ready = false;
     server->dtc_setting_enabled = true;
+    server->current_address_mode = UDS_ADDRESS_PHYSICAL;
 }
 
 void uds_server_reset_security(UdsServer *server) {
@@ -489,15 +527,27 @@ static UdsCallbackResult service_ecu_reset(UdsServer *server, const uint8_t *req
         server->reset_ready = false;
         server->pending_reset_reason = UDS_RESET_NORMAL;
         server->pending_reset_subfunction = subfunction;
+        *response_len = 0U;
         return UDS_RESULT_NO_RESPONSE;
     }
-    if (capacity < 2U) {
-        return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
-                                 capacity);
+    if (subfunction == UDS_RESET_TYPE_ENABLE_RAPID_POWER_SHUTDOWN) {
+        if (capacity < 3U) {
+            return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                     capacity);
+        }
+        response[0] = 0x51U;
+        response[1] = subfunction;
+        response[2] = 0x00U;
+        *response_len = 3U;
+    } else {
+        if (capacity < 2U) {
+            return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                     capacity);
+        }
+        response[0] = 0x51U;
+        response[1] = subfunction;
+        *response_len = 2U;
     }
-    response[0] = 0x51U;
-    response[1] = subfunction;
-    *response_len = 2U;
     server->reset_pending = true;
     server->reset_ready = false;
     server->pending_reset_reason = UDS_RESET_NORMAL;
@@ -571,7 +621,11 @@ static UdsCallbackResult service_read_dtc(UdsServer *server, const uint8_t *requ
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
-    uint8_t subfunction = (uint8_t)(request[1] & 0x7FU);
+    if ((request[1] & 0x80U) != 0U) {
+        return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
+                                 capacity);
+    }
+    uint8_t subfunction = request[1];
     if (!uds_dtc_subfunction_supported(subfunction)) {
         return negative_response(request, UDS_NRC_SUBFUNCTION_NOT_SUPPORTED, response, response_len,
                                  capacity);
@@ -666,6 +720,40 @@ static UdsCallbackResult service_read_data(UdsServer *server, const uint8_t *req
 #endif
 }
 
+static UdsCallbackResult service_write_data(UdsServer *server, const uint8_t *request,
+                                            uint16_t request_len, uint8_t *response,
+                                            uint16_t *response_len, uint16_t capacity) {
+#if UDS_ENABLE_WRITE_DATA_BY_IDENTIFIER
+    if (request_len < 4U) {
+        return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
+                                 response, response_len, capacity);
+    }
+    if (server->callbacks.write_did == NULL) {
+        return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                 capacity);
+    }
+    uint16_t did = read_u16(&request[1]);
+    UdsCallbackResult result = server->callbacks.write_did(
+        server->context, did, &request[3], (uint16_t)(request_len - 3U));
+    if (result != UDS_RESULT_OK) {
+        return callback_result(server, result, request, response, response_len, capacity);
+    }
+    if (capacity < 3U) {
+        return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
+                                 capacity);
+    }
+    response[0] = 0x6EU;
+    response[1] = request[1];
+    response[2] = request[2];
+    *response_len = 3U;
+    return UDS_RESULT_OK;
+#else
+    (void)server;
+    return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                             capacity);
+#endif
+}
+
 static UdsCallbackResult service_security_access(UdsServer *server, const uint8_t *request,
                                                  uint16_t request_len, uint8_t *response,
                                                  uint16_t *response_len, uint16_t capacity,
@@ -711,6 +799,13 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
             return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
                                      capacity);
         }
+        if (server->security_level == level) {
+            (void)memset(&response[2], 0, seed_length);
+            response[0] = 0x67U;
+            response[1] = subfunction;
+            *response_len = (uint16_t)(2U + seed_length);
+            return UDS_RESULT_OK;
+        }
         server->security_seed_level = level;
         server->security_seed_valid = true;
         server->security_seed_timer_active = server->security_seed_timeout_ms != 0U;
@@ -750,12 +845,15 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
     server->security_failed_attempts = 0U;
     security_invalidate_seed(server);
     server->security_state = UDS_SECURITY_STATE_UNLOCKED;
+    if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
+        return UDS_RESULT_NO_RESPONSE;
+    }
     if (capacity < 2U) {
         return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
                                  capacity);
     }
     response[0] = 0x67U;
-    response[1] = subfunction;
+    response[1] = (uint8_t)(subfunction & 0x7FU);
     *response_len = 2U;
     return UDS_RESULT_OK;
 #else
@@ -855,6 +953,9 @@ static UdsCallbackResult service_routine_control(UdsServer *server, const uint8_
     if (result != UDS_RESULT_OK) {
         return callback_result(server, result, request, response, response_len, capacity);
     }
+    if ((request[1] & UDS_SUPPRESS_POSITIVE_RESPONSE) != 0U) {
+        return UDS_RESULT_NO_RESPONSE;
+    }
     if ((uint16_t)(capacity - *response_len) < extra_length) {
         return negative_response(request, UDS_NRC_RESPONSE_TOO_LONG, response, response_len,
                                  capacity);
@@ -872,19 +973,24 @@ static UdsCallbackResult service_download(UdsServer *server, const uint8_t *requ
                                           uint16_t request_len, uint8_t *response,
                                           uint16_t *response_len, uint16_t capacity) {
 #if UDS_ENABLE_REQUEST_DOWNLOAD
-    if ((request_len < 3U) || (server->callbacks.request_download == NULL)) {
+    if ((request_len < 4U) || (server->callbacks.request_download == NULL)) {
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
-    uint8_t address_length = (uint8_t)(request[1] >> 4U);
-    uint8_t length_length = (uint8_t)(request[1] & 0x0FU);
+    /* request[1]: dataFormatIdentifier (DFI)
+     * request[2]: addressAndLengthFormatIdentifier (ALFID)
+     *   bits 7-4: length of memorySize parameter
+     *   bits 3-0: length of memoryAddress parameter
+     */
+    uint8_t address_length = (uint8_t)(request[2] & 0x0FU);
+    uint8_t length_length = (uint8_t)(request[2] >> 4U);
     if ((address_length == 0U) || (address_length > 4U) || (length_length == 0U) ||
-        (length_length > 4U) || (request_len != (uint16_t)(2U + address_length + length_length))) {
+        (length_length > 4U) || (request_len != (uint16_t)(3U + address_length + length_length))) {
         return negative_response(request, UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT,
                                  response, response_len, capacity);
     }
-    uint32_t address = read_be_u32(&request[2], address_length);
-    uint32_t length = read_be_u32(&request[2U + address_length], length_length);
+    uint32_t address = read_be_u32(&request[3], address_length);
+    uint32_t length = read_be_u32(&request[3U + address_length], length_length);
     uint16_t max_block_length = 0U;
     UdsCallbackResult result =
         server->callbacks.request_download(server->context, address, length, &max_block_length);
@@ -1057,68 +1163,95 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
     if ((address_mode != UDS_ADDRESS_PHYSICAL) && (address_mode != UDS_ADDRESS_FUNCTIONAL)) {
         return UDS_RESULT_ERROR;
     }
+    server->current_address_mode = address_mode;
+    s_current_server = server;
     uint8_t service = request[0];
     const UdsServiceAttribute *attribute = uds_service_attribute(
         service, (request_len > 1U) ? (request[1] & 0x7FU) : UDS_SERVICE_ANY_SUBFUNCTION);
     if (attribute->sid != 0U) {
         if ((attribute->address_mode != UDS_ADDRESS_MODE_BOTH) &&
             ((attribute->address_mode & address_mode) == 0U)) {
-            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
-                                     response, response_len, capacity);
+            UdsCallbackResult res = negative_response(
+                request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response, response_len,
+                capacity);
+            s_current_server = NULL;
+            return res;
         }
         if ((attribute->session_mask & session_mask(server->session)) == 0U) {
-            return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
-                                     response, response_len, capacity);
+            UdsCallbackResult res = negative_response(
+                request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response, response_len,
+                capacity);
+            s_current_server = NULL;
+            return res;
         }
         if ((attribute->security_mask != UDS_SECURITY_MASK_NONE) &&
             ((attribute->security_mask & (uint16_t)(1U << server->security_level)) == 0U)) {
-            return negative_response(request, UDS_NRC_SECURITY_ACCESS_DENIED, response,
-                                     response_len, capacity);
+            UdsCallbackResult res = negative_response(
+                request, UDS_NRC_SECURITY_ACCESS_DENIED, response, response_len, capacity);
+            s_current_server = NULL;
+            return res;
         }
     }
     *response_len = 0U;
     server->last_activity_ms = now_ms;
+    UdsCallbackResult result;
     switch (service) {
     case 0x10U:
-        return service_session_control(server, request, request_len, response, response_len,
-                                       capacity, now_ms);
+        result = service_session_control(server, request, request_len, response, response_len,
+                                         capacity, now_ms);
+        break;
     case 0x11U:
-        return service_ecu_reset(server, request, request_len, response, response_len, capacity);
+        result = service_ecu_reset(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x14U:
-        return service_clear_dtc(server, request, request_len, response, response_len, capacity);
+        result = service_clear_dtc(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x19U:
-        return service_read_dtc(server, request, request_len, response, response_len, capacity);
+        result = service_read_dtc(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x22U:
-        return service_read_data(server, request, request_len, response, response_len, capacity);
+        result = service_read_data(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x27U:
-        return service_security_access(server, request, request_len, response, response_len,
-                                       capacity, now_ms);
+        result = service_security_access(server, request, request_len, response, response_len,
+                                         capacity, now_ms);
+        break;
     case 0x28U:
-        return service_communication_control(server, request, request_len, response, response_len,
-                                             capacity);
+        result = service_communication_control(server, request, request_len, response, response_len,
+                                               capacity);
+        break;
+    case 0x2EU:
+        result = service_write_data(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x2FU:
-        return service_io_control(server, request, request_len, response, response_len, capacity);
+        result = service_io_control(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x31U:
-        return service_routine_control(server, request, request_len, response, response_len,
-                                       capacity);
+        result = service_routine_control(server, request, request_len, response, response_len,
+                                         capacity);
+        break;
     case 0x34U:
-        return service_download(server, request, request_len, response, response_len, capacity);
+        result = service_download(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x36U:
-        return service_transfer_data(server, request, request_len, response, response_len,
-                                     capacity);
+        result = service_transfer_data(server, request, request_len, response, response_len,
+                                       capacity);
+        break;
     case 0x37U:
-        return service_transfer_exit(server, request, request_len, response, response_len,
-                                     capacity);
+        result = service_transfer_exit(server, request, request_len, response, response_len,
+                                       capacity);
+        break;
     case 0x3EU:
-        return service_tester_present(request, request_len, response, response_len, capacity);
+        result = service_tester_present(request, request_len, response, response_len, capacity);
+        break;
     case 0x85U:
-        return service_dtc_setting(server, request, request_len, response, response_len, capacity);
+        result = service_dtc_setting(server, request, request_len, response, response_len, capacity);
+        break;
     case 0x23U:
     case 0x24U:
     case 0x29U:
     case 0x2AU:
     case 0x2CU:
-    case 0x2EU:
     case 0x35U:
     case 0x38U:
     case 0x3DU:
@@ -1126,12 +1259,16 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
     case 0x84U:
     case 0x86U:
     case 0x87U:
-        return service_modular_backend(server, request, request_len, response, response_len,
-                                       capacity);
+        result = service_modular_backend(server, request, request_len, response, response_len,
+                                         capacity);
+        break;
     default:
-        return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
-                                 capacity);
+        result = negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
+                                   capacity);
+        break;
     }
+    s_current_server = NULL;
+    return result;
 }
 
 UdsCallbackResult uds_server_tick(UdsServer *server, uint32_t now_ms) {

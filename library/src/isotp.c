@@ -164,6 +164,8 @@ static bool decode_ff(const IsoTpCanFrame *frame, uint32_t *length, uint8_t *hea
         return false;
     *length = ((uint32_t)frame->data[2] << 24U) | ((uint32_t)frame->data[3] << 16U) |
               ((uint32_t)frame->data[4] << 8U) | frame->data[5];
+    if (*length <= 4095U)
+        return false;
     *header = 6U;
     return true;
 }

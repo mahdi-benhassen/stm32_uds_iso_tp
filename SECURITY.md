@@ -33,8 +33,8 @@ The maintainer should acknowledge receipt, assess severity and affected versions
 The following controls are required before deploying a product derived from this reference:
 
 - Replace the reference vendor identity, product code, revision, and serial number.
-- Restrict LSS, SDO writes, diagnostics, and commissioning access to a controlled physical or authenticated boundary.
-- Keep the CiA 309 gateway disabled unless a product-specific authentication, authorization, rate-limit, audit, and session policy has been reviewed.
+- Restrict diagnostics, commissioning, and all destructive service access to a controlled physical or authenticated boundary.
+- Define product-specific authentication, authorization, rate-limit, audit, and session policies before enabling destructive diagnostic services.
 - Define a secure-boot and signed-update architecture if firmware updates are supported.
 - Lock or control SWD/JTAG access according to the manufacturing and service threat model.
 - Validate CAN bus-off recovery, malformed-frame handling, watchdog behavior, power-loss behavior, and safe outputs on the target board.

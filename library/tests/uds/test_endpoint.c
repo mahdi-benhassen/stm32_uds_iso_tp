@@ -328,6 +328,16 @@ static void test_functional_endpoint_addressing(void) {
     assert(uds_isotp_endpoint_process(&endpoint, 0U) == ISOTP_TX_FRAME_READY);
     assert(sink.count == 1U && sink.frames[0].can_id == 0x7E8U && sink.frames[0].dlc == 5U &&
            sink.frames[0].data[0] == 0x04U && sink.frames[0].data[1] == 0x62U);
+
+    IsoTpCanFrame ff_request = {0};
+    ff_request.can_id = 0x7DFU;
+    ff_request.dlc = 8U;
+    ff_request.data[0] = 0x10U;
+    ff_request.data[1] = 0x14U;
+    size_t count_before = sink.count;
+    assert(uds_isotp_endpoint_receive(&endpoint, &ff_request, 1U) == ISOTP_OK);
+    assert(uds_isotp_endpoint_process(&endpoint, 1U) == ISOTP_OK);
+    assert(sink.count == count_before);
 }
 
 static void test_flow_control_error_and_timeout(void) {

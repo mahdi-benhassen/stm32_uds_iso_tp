@@ -108,6 +108,21 @@ int main(void)
   MX_CAN1_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
+  CAN_FilterTypeDef sFilterConfig = {0};
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = 0x0000;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = 0x0000;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
+  if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK) {
+    uds_platform_error();
+  }
+
   uds_can_transport_init(&uds_transport, &hcan1, 0x7E0U, 0x7E8U);
   uds_app_init(&uds_transport, uds_platform_now_ms());
   if (HAL_CAN_Start(&hcan1) != HAL_OK ||

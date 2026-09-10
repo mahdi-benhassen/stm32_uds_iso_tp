@@ -131,6 +131,10 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
     IsoTpCanFrame network_frame = *frame;
     UdsAddressMode address_mode = UDS_ADDRESS_PHYSICAL;
     if (frame_is_functional(endpoint, frame)) {
+        uint8_t frame_type = (uint8_t)(frame->data[0] >> 4U);
+        if (frame_type != 0U) {
+            return ISOTP_OK;
+        }
         network_frame.can_id = endpoint->config.request_id;
         address_mode = UDS_ADDRESS_FUNCTIONAL;
     }

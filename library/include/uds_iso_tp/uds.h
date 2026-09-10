@@ -99,6 +99,7 @@
 #define UDS_NRC_GENERAL_PROGRAMMING_FAILURE 0x72U
 #define UDS_NRC_WRONG_BLOCK_SEQUENCE_COUNTER 0x73U
 #define UDS_NRC_REQUEST_CORRECTLY_RECEIVED_RESPONSE_PENDING 0x78U
+#define UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7EU
 #define UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7FU
 
 typedef enum { UDS_ADDRESS_PHYSICAL = 1U, UDS_ADDRESS_FUNCTIONAL = 2U } UdsAddressMode;
@@ -125,6 +126,9 @@ typedef struct {
 #endif
 #ifndef UDS_ENABLE_READ_DATA_BY_IDENTIFIER
 #define UDS_ENABLE_READ_DATA_BY_IDENTIFIER 1U
+#endif
+#ifndef UDS_ENABLE_WRITE_DATA_BY_IDENTIFIER
+#define UDS_ENABLE_WRITE_DATA_BY_IDENTIFIER 1U
 #endif
 #ifndef UDS_ENABLE_SECURITY_ACCESS
 #define UDS_ENABLE_SECURITY_ACCESS 1U
@@ -283,6 +287,7 @@ typedef struct {
     bool reset_pending;
     bool reset_ready;
     bool dtc_setting_enabled;
+    UdsAddressMode current_address_mode;
 } UdsServer;
 
 bool uds_security_subfunction_level(uint8_t subfunction, uint8_t *level, bool *is_seed);
