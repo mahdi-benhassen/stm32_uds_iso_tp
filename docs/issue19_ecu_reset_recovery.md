@@ -7,7 +7,7 @@
 
 ## Executive status
 
-Issue #19 is a **platform and application reset-handoff issue**, not a reason to add a fixed delay to the generic UDS library. The maintained implementation now keeps ECUReset reset ownership in the C092 application: the platform callback arms a pending reset, the application main loop polls it, and the current C092 profile waits 50 ms before invoking the MCU reset. The endpoint does not reject a follow-up diagnostic payload during that handoff window. This handoff value is not a measured reset-to-diagnostic-ready interval.
+Issue #19 is a **platform and application reset-handoff issue**, not a reason to add a fixed delay to the generic UDS library. The maintained implementation now keeps ECUReset reset ownership in the C092 application: the platform callback arms a pending reset, the application main loop polls it, and the current C092 profile waits 50 ms before invoking the MCU reset. After the final positive ECUReset frame completes, the endpoint ignores further diagnostic requests until reset. This handoff value is not a measured reset-to-diagnostic-ready interval.
 
 The software changes are validated by host and ARM GCC checks. **The issue cannot be marked hardware-fixed yet** because no STM32C092 board, CAN analyzer trace, Keil MDK/Arm Compiler 6 build, reset-cause capture, or measured reset-to-diagnostic-ready interval was available in this environment.
 
@@ -25,7 +25,7 @@ The source-level defects and acceptance risks identified are as follows.
 | RX could arrive before endpoint initialization | The reporter archive starts FDCAN and enables RX notification before calling transport/endpoint initialization; `s_initialized` is false in the callback during that window. | The safety guard must remain. The correction initializes transport/ISO-TP/UDS before notification and `HAL_FDCAN_Start()`, and records `RX_REJECTED_NOT_INITIALIZED` if an invalid integration still triggers the callback early. |
 | The reporter project’s exact runtime stop point is unproven | The supplied project has no physical trace in the repository showing whether the next frame was received, parsed, responded to, queued, or transmitted. | A fixed delay would conceal the failing stage rather than identify it. |
 
-The corrected conclusion is therefore: **ECUReset execution is now application-owned and deferred through a platform pending-reset poll; the endpoint does not reject the reporter’s immediate follow-up diagnostic request; C092 readiness and bounded mailbox handling remain explicit; and the exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
+The corrected conclusion is therefore: **ECUReset execution is application-owned and deferred through a platform pending-reset poll; the endpoint is silent after the final positive ECUReset response until reset; C092 readiness and bounded mailbox handling remain explicit; and the exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
 
 ## Corrected architecture
 
@@ -38,8 +38,7 @@ The generic library remains independent of STM32 HAL, CMSIS, registers, delays, 
   -> C092 transport accepts the frame
   -> response path completes
   -> application-owned platform reset callback arms a pending reset timestamp
-  -> C092 main loop continues ordinary ISO-TP/UDS processing
-  -> follow-up 10 01 may produce 50 01 during the handoff window
+  -> ECU ignores new diagnostic requests during the handoff window
   -> platform reset poll reaches 50 ms and calls NVIC_SystemReset()
   -> MCU starts from reset vector
   -> HAL / clock / GPIO / FDCAN / filter / notification / start / UDS init
@@ -69,7 +68,7 @@ The platform-owned `UdsC092DiagnosticTrace` records optional first-event timesta
 | `UDS_INIT_DONE` | UDS server state was initialized to clean state. |
 | `DIAGNOSTIC_READY` | All required stages are complete; the application may report readiness. Valid frames received after FDCAN start are captured in the bounded mailbox even before this mark. |
 
-The generic library intentionally does not define a reset delay. The C092 platform currently defines a 50 ms post-response handoff timer in its own pending-reset object; this is application policy, not P2 timing and not a measured reset-to-ready interval. During that window, normal mainline UDS/ISO-TP processing remains active so an immediate follow-up `10 01` can produce `50 01`. Separately, once FDCAN is started and RX notification is active, a valid frame is accepted into the single bounded mailbox even if the diagnostic trace is still `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The tester should still wait for the project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
+The generic library intentionally does not define a reset delay. The C092 platform currently defines a 50 ms post-response handoff timer in its own pending-reset object; this is application policy, not P2 timing and not a measured reset-to-ready interval. During that window, the endpoint ignores diagnostic requests, consistent with ISO 14229-1's recommendation that an ECU not accept requests or send responses after an ECUReset positive response until reset completes. Separately, once FDCAN is started and RX notification is active, a valid frame is accepted into the single bounded mailbox even if the diagnostic trace is still `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The tester should still wait for the project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
 
 ## ECUReset ordering
 
@@ -103,7 +102,7 @@ On a selected STM32C092 board and CAN transceiver, execute the following with ti
 
 ```text
 Power-on -> 10 01 -> 50 01
-11 01 -> 51 01 -> 10 01 -> 50 01 -> delayed MCU reset
+11 01 -> 51 01 -> ECU silent -> delayed MCU reset
 wait for measured DIAGNOSTIC_READY after reboot
 10 01 -> 50 01
 22 DID -> 62 DID...

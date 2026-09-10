@@ -147,14 +147,13 @@ The reset sequence uses a simple application-owned pending flag:
       -> 51 xx response ready -> FDCAN submission
       -> response path complete -> return to mainline
       -> platform reset callback arms pending reset timestamp
-      -> main loop continues normal UDS/ISO-TP processing
-      -> 10 01 -> 50 01 during the handoff window
+      -> ECU ignores new diagnostic requests during the handoff window
       -> platform reset poll reaches 50 ms
       -> NVIC_SystemReset()
       -> complete HAL/FDCAN/UDS startup -> DIAGNOSTIC_READY
       -> next tester request
 ```
 
-The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback only arms the pending reset, and `uds_c092_platform_reset_poll()` owns the final 50 ms handoff before `NVIC_SystemReset()`. The 50 ms handoff is not the measured reset-to-diagnostic-ready interval. A follow-up request may be processed during this handoff, but the tester must wait for `DIAGNOSTIC_READY` before sending requests after the MCU has actually rebooted.
+The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback only arms the pending reset, and `uds_c092_platform_reset_poll()` owns the final 50 ms handoff before `NVIC_SystemReset()`. The 50 ms handoff is not the measured reset-to-diagnostic-ready interval. After the positive ECUReset response has completed, the endpoint ignores diagnostic requests until the MCU has actually rebooted; the tester must then wait for `DIAGNOSTIC_READY` before sending the next request.
 
 The maintained adapter accepts only the configured standard physical request ID and optional functional request ID at the application handoff. The generated FDCAN filter should be narrower than the reporter’s broad range filter, normally accepting the configured `0x7E0` physical request and `0x7DF` functional request only when functional addressing is intentionally enabled. Standard data frames are required; unrelated IDs, extended IDs, and remote frames should be rejected by the generated filter/global-filter configuration.

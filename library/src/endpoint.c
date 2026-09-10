@@ -121,6 +121,13 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
         return isotp_tx_feed_flow_control(&endpoint->tx, frame, now_ms);
     }
 
+    /* ISO 14229-1 recommends that the ECU remain silent between a successful
+     * ECUReset response and the completed reset.  This applies only to a real
+     * ECUReset (which has a reset subfunction), not to the library's internal
+     * session-transition reset bookkeeping. */
+    if (response_reset_pending(&endpoint->uds))
+        return ISOTP_OK;
+
     IsoTpCanFrame network_frame = *frame;
     UdsAddressMode address_mode = UDS_ADDRESS_PHYSICAL;
     if (frame_is_functional(endpoint, frame)) {
@@ -137,7 +144,6 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
     }
     if (status != ISOTP_COMPLETE)
         return status;
-    /* ECUReset remains application-owned; do not block subsequent UDS services here. */
     if (event.length > UINT16_MAX)
         return ISOTP_ERR_OVERFLOW;
     bool reset_was_pending = uds_server_reset_pending(&endpoint->uds);

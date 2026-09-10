@@ -13,9 +13,7 @@ Tester                         ECU / C092 platform
   |                                  | reset_pending = true
   |                                  | return to application mainline
   |                                  | platform reset object is armed
-  |                                  | mainline continues normal UDS processing
-  |<-------- 10 01 ------------------|
-  |                                  | positive response 50 01
+  |                                  | ECU remains silent until reset
   |                                  | reset poll reaches 50 ms
   |                                  | platform reset executor
   |                                  | NVIC_SystemReset()
@@ -35,7 +33,7 @@ Tester                         ECU / C092 platform
 
 ## Software invariants
 
-The response must be generated before reset execution. ECUReset only arms a pending application reset; the endpoint does not reject later diagnostic payloads during the platform handoff window. Reset execution itself occurs from the C092 application mainline poll. The generic library does not call `HAL_Delay()` and contains no STM32-specific reset code. The C092 platform owns the 50 ms handoff timer and then calls `NVIC_SystemReset()`.
+The response must be generated before reset execution. ECUReset only arms a pending application reset; after the `51 xx` response completes, the endpoint ignores diagnostic request frames until reset. Reset execution itself occurs from the C092 application mainline poll. The generic library does not call `HAL_Delay()` and contains no STM32-specific reset code. The C092 platform owns the 50 ms handoff timer and then calls `NVIC_SystemReset()`.
 
 After `NVIC_SystemReset()`, all board-owned initialization must run again. The platform should mark `UDS_C092_DIAG_READY` only after HAL, clock, GPIO, FDCAN initialization, filters, required notifications, FDCAN start, transport initialization, and UDS endpoint initialization have succeeded.
 
@@ -57,7 +55,7 @@ The minimum physical sequence is:
 
 ```text
 Power-on:  10 01 -> 50 01
-Reset:     11 01 -> 51 01 -> 10 01 -> 50 01 -> delayed MCU reset
+Reset:     11 01 -> 51 01 -> ECU silent -> delayed MCU reset
 Recovery:  after MCU reset, wait until DIAGNOSTIC_READY -> 10 01 -> 50 01
 Extended:  22 DID -> 62 DID
 ```

@@ -203,11 +203,11 @@ static void test_deferred_reset_and_full_duplex(void) {
     session_request.dlc = 3U;
     session_request.data[1] = 0x10U;
     session_request.data[2] = 0x01U;
-    assert(uds_isotp_endpoint_receive(&reset_endpoint, &session_request, 1U) ==
-           ISOTP_TX_FRAME_READY);
-    assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_TX_FRAME_READY);
-    assert(reset_sink.count == 2U && reset_sink.frames[1].data[0] == 0x06U &&
-           reset_sink.frames[1].data[1] == 0x50U && reset_sink.frames[1].data[2] == 0x01U);
+    /* Once 51 01 has completed, do not process or reply to requests until
+     * the application-owned reset is executed. */
+    assert(uds_isotp_endpoint_receive(&reset_endpoint, &session_request, 1U) == ISOTP_OK);
+    assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_OK);
+    assert(reset_sink.count == 1U);
     assert(reset_sink.reset_calls == 0U);
     assert(uds_isotp_endpoint_tick(&reset_endpoint, 1U) == ISOTP_OK);
     assert(reset_sink.reset_calls == 1U && reset_sink.reset_event_count == 5U &&
@@ -219,9 +219,9 @@ static void test_deferred_reset_and_full_duplex(void) {
     reset_request.data[2] = 0x02U;
     assert(uds_isotp_endpoint_receive(&reset_endpoint, &reset_request, 1U) == ISOTP_TX_FRAME_READY);
     assert(uds_isotp_endpoint_process(&reset_endpoint, 1U) == ISOTP_TX_FRAME_READY);
-    assert(reset_sink.count == 3U && reset_sink.frames[2].data[0] == 0x03U &&
-           reset_sink.frames[2].data[1] == 0x7FU && reset_sink.frames[2].data[2] == 0x11U &&
-           reset_sink.frames[2].data[3] == UDS_NRC_REQUEST_OUT_OF_RANGE);
+    assert(reset_sink.count == 2U && reset_sink.frames[1].data[0] == 0x03U &&
+           reset_sink.frames[1].data[1] == 0x7FU && reset_sink.frames[1].data[2] == 0x11U &&
+           reset_sink.frames[1].data[3] == UDS_NRC_REQUEST_OUT_OF_RANGE);
     assert(reset_sink.reset_calls == 1U);
 
     reset_request.data[1] = 0x11U;
