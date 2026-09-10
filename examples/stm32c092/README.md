@@ -136,7 +136,7 @@ uds_c092_app_init_default(&uds_transport, HAL_GetTick());
 uds_c092_diagnostic_mark(&uds_trace, UDS_C092_BOOT_DIAGNOSTIC_READY, HAL_GetTick());
 ```
 
-The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages, including UDS endpoint initialization performed by `uds_c092_app_init()`, have succeeded. The ISR path does not print, wait, or dispatch UDS. Once FDCAN is started and RX notification is active, a valid frame is captured in the single bounded mailbox even if the trace remains `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The endpoint must already have been initialized before that point; otherwise `s_initialized` correctly rejects the frame as unsafe. A second frame while the mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should still wait for the project-defined diagnostic-ready condition after reset. The repository does not invent a fixed 10/20/50 ms delay; the reset-to-ready interval must be measured on the selected C092 board.
+The `DIAGNOSTIC_READY` mark is intentionally rejected until all required stages, including UDS endpoint initialization performed by `uds_c092_app_init()`, have succeeded. The ISR path does not print, wait, or dispatch UDS. Once FDCAN is started and RX notification is active, a valid frame is captured in the single bounded mailbox even if the trace remains `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The endpoint must already have been initialized before that point; otherwise `s_initialized` correctly rejects the frame as unsafe. A second frame while the mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should still wait for the project-defined diagnostic-ready condition after reset. The generic library does not invent a reset delay; the C092 platform owns a 50 ms post-response reset handoff, which is separate from the measured reset-to-ready interval.
 
 The trace counters expose `fdcan_rx_count`, `rx_accepted_count`, `rx_rejected_not_initialized_count`, `isotp_rx_count`, `uds_request_count`, `uds_response_count`, `fdcan_tx_count`, and rejected/dropped/overflowed RX counts. These counters are bounded-width monotonic counters that reset with the MCU and are suitable for a debugger or a project-owned diagnostic readout. They are evidence aids, not a replacement for timestamped CAN-analyzer traces.
 
@@ -146,13 +146,15 @@ The reset sequence uses a simple application-owned pending flag:
 11 xx -> UDS validation -> reset_pending = true
       -> 51 xx response ready -> FDCAN submission
       -> response path complete -> return to mainline
-      -> uds_server_tick() observes reset_ready
-      -> HAL_Delay(5 ms) in the C092 platform callback
-      -> platform reset callback -> NVIC_SystemReset()
+      -> platform reset callback arms pending reset timestamp
+      -> main loop continues normal UDS/ISO-TP processing
+      -> 10 01 -> 50 01 during the handoff window
+      -> platform reset poll reaches 50 ms
+      -> NVIC_SystemReset()
       -> complete HAL/FDCAN/UDS startup -> DIAGNOSTIC_READY
       -> next tester request
 ```
 
-The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback owns the final 5 ms handoff before `NVIC_SystemReset()`. The 5 ms handoff is not the measured reset-to-diagnostic-ready interval, and the tester must wait for `DIAGNOSTIC_READY` before sending the next request.
+The UDS service and CAN ISR never execute the reset. `HAL_FDCAN_AddMessageToTxFifoQ()` remains unchanged; the application callback only arms the pending reset, and `uds_c092_platform_reset_poll()` owns the final 50 ms handoff before `NVIC_SystemReset()`. The 50 ms handoff is not the measured reset-to-diagnostic-ready interval. A follow-up request may be processed during this handoff, but the tester must wait for `DIAGNOSTIC_READY` before sending requests after the MCU has actually rebooted.
 
 The maintained adapter accepts only the configured standard physical request ID and optional functional request ID at the application handoff. The generated FDCAN filter should be narrower than the reporter’s broad range filter, normally accepting the configured `0x7E0` physical request and `0x7DF` functional request only when functional addressing is intentionally enabled. Standard data frames are required; unrelated IDs, extended IDs, and remote frames should be rejected by the generated filter/global-filter configuration.

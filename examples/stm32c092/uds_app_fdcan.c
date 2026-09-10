@@ -13,6 +13,12 @@ static volatile bool s_rx_pending;
 static bool s_initialized;
 static UdsC092DiagnosticTrace *s_diagnostics;
 
+#if defined(__GNUC__)
+__attribute__((weak))
+#endif
+void uds_c092_platform_reset_poll(void) {
+}
+
 void uds_c092_app_init(UdsC092FdcanTransport *transport, uint32_t now_ms,
                        const UdsCallbacks *application_callbacks, void *uds_context,
                        UdsIsoTpResetEventFn reset_event, void *reset_event_context) {
@@ -140,4 +146,5 @@ void uds_c092_app_process(uint32_t now_ms) {
     }
     (void)uds_isotp_endpoint_process(&s_endpoint, now_ms);
     (void)uds_isotp_endpoint_tick(&s_endpoint, now_ms);
+    uds_c092_platform_reset_poll();
 }

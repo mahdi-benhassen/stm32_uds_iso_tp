@@ -7,13 +7,13 @@
 
 ## Executive status
 
-Issue #19 is a **platform and transport lifecycle issue**, not a reason to add a fixed 50 ms delay to the generic UDS library. The implementation now provides an explicit C092 diagnostic readiness state, optional bounded boot timestamps and counters, bounded RX-mailbox handling after FDCAN start, stricter ECUReset endpoint initialization, and host coverage for repeated reset/reconnect behavior.
+Issue #19 is a **platform and application reset-handoff issue**, not a reason to add a fixed delay to the generic UDS library. The maintained implementation now keeps ECUReset reset ownership in the C092 application: the platform callback arms a pending reset, the application main loop polls it, and the current C092 profile waits 50 ms before invoking the MCU reset. The endpoint does not reject a follow-up diagnostic payload during that handoff window. This handoff value is not a measured reset-to-diagnostic-ready interval.
 
 The software changes are validated by host and ARM GCC checks. **The issue cannot be marked hardware-fixed yet** because no STM32C092 board, CAN analyzer trace, Keil MDK/Arm Compiler 6 build, reset-cause capture, or measured reset-to-diagnostic-ready interval was available in this environment.
 
 ## Root-cause analysis
 
-The attached reporter project is useful evidence but cannot prove the physical stop point without a trace. It configures Classic CAN, normal mode, TX FIFO operation, a broad standard-ID range filter, RX FIFO0 notification, and `FDCAN_NO_TX_EVENTS` in its sample TX header. Therefore the earlier C092 TX Event FIFO hypothesis from the separate repeated-request issue must not be copied blindly to Issue #19.
+The attached reporter project and the Ecu_test solution are useful behavioral references but cannot prove the physical stop point without a trace. The Ecu_test solution keeps the CAN send driver unchanged and arms a platform-owned pending reset from the callback, then polls it from the C092 application main loop. The maintained C092 transport completion contract remains available for transport bookkeeping; it is not used to execute the platform reset policy.
 
 The source-level defects and acceptance risks identified are as follows.
 
@@ -25,7 +25,7 @@ The source-level defects and acceptance risks identified are as follows.
 | RX could arrive before endpoint initialization | The reporter archive starts FDCAN and enables RX notification before calling transport/endpoint initialization; `s_initialized` is false in the callback during that window. | The safety guard must remain. The correction initializes transport/ISO-TP/UDS before notification and `HAL_FDCAN_Start()`, and records `RX_REJECTED_NOT_INITIALIZED` if an invalid integration still triggers the callback early. |
 | The reporter project’s exact runtime stop point is unproven | The supplied project has no physical trace in the repository showing whether the next frame was received, parsed, responded to, queued, or transmitted. | A fixed delay would conceal the failing stage rather than identify it. |
 
-The corrected conclusion is therefore: **the repository had an unsafe generic completion fallback, lacked explicit C092 readiness instrumentation, and initially gated mailbox capture on the higher-level READY state. The corrected C092 application keeps valid post-start frames in a bounded mailbox; the reporter’s exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
+The corrected conclusion is therefore: **ECUReset execution is now application-owned and deferred through a platform pending-reset poll; the endpoint does not reject the reporter’s immediate follow-up diagnostic request; C092 readiness and bounded mailbox handling remain explicit; and the exact hardware failure stage remains unconfirmed until instrumentation is run on the board.**
 
 ## Corrected architecture
 
@@ -36,9 +36,11 @@ The generic library remains independent of STM32 HAL, CMSIS, registers, delays, 
   -> generic UDS validates reset and prepares 51 xx
   -> ISO-TP prepares the response
   -> C092 transport accepts the frame
-  -> transport-specific completion callback proves the defined completion boundary
-  -> endpoint calls uds_server_complete_reset()
-  -> application-owned platform reset callback calls NVIC_SystemReset()
+  -> response path completes
+  -> application-owned platform reset callback arms a pending reset timestamp
+  -> C092 main loop continues ordinary ISO-TP/UDS processing
+  -> follow-up 10 01 may produce 50 01 during the handoff window
+  -> platform reset poll reaches 50 ms and calls NVIC_SystemReset()
   -> MCU starts from reset vector
   -> HAL / clock / GPIO / FDCAN / filter / notification / start / UDS init
   -> DIAGNOSTIC_READY
@@ -67,7 +69,7 @@ The platform-owned `UdsC092DiagnosticTrace` records optional first-event timesta
 | `UDS_INIT_DONE` | UDS server state was initialized to clean state. |
 | `DIAGNOSTIC_READY` | All required stages are complete; the application may report readiness. Valid frames received after FDCAN start are captured in the bounded mailbox even before this mark. |
 
-The implementation intentionally does not define a magic 10, 20, or 50 ms delay. Once FDCAN is started and RX notification is active, a valid frame is accepted into the single bounded mailbox even if the diagnostic trace is still `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. A second frame while that mailbox is occupied is counted as `RX_MAILBOX_FULL`. Frames arriving before FDCAN can receive them, or after a fatal initialization failure, cannot be recovered in software. The tester should wait for the project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
+The generic library intentionally does not define a reset delay. The C092 platform currently defines a 50 ms post-response handoff timer in its own pending-reset object; this is application policy, not P2 timing and not a measured reset-to-ready interval. During that window, normal mainline UDS/ISO-TP processing remains active so an immediate follow-up `10 01` can produce `50 01`. Separately, once FDCAN is started and RX notification is active, a valid frame is accepted into the single bounded mailbox even if the diagnostic trace is still `BOOTING`; it is not rejected merely because the higher-level READY mark has not yet been recorded. The tester should still wait for the project-defined readiness indication, and the actual reset-to-ready time must be measured on the selected board.
 
 ## ECUReset ordering
 
@@ -77,7 +79,7 @@ The endpoint event order remains:
 REQUESTED -> RESPONSE_READY -> TX_SUBMITTED -> TX_COMPLETE -> EXECUTED
 ```
 
-`NVIC_SystemReset()` is reachable only from the application-owned C092 reset executor after the endpoint has observed the configured transport completion callback. If the transport reports TX error, the endpoint clears in-flight protocol state and does not execute the reset completion callback.
+`NVIC_SystemReset()` is reachable only from the application-owned C092 reset poll after the platform callback has armed a pending reset. The CAN send driver remains unchanged. The handoff timer must not be confused with physical CAN transmission completion or diagnostic readiness.
 
 ## Validation performed
 
@@ -101,13 +103,13 @@ On a selected STM32C092 board and CAN transceiver, execute the following with ti
 
 ```text
 Power-on -> 10 01 -> 50 01
-11 01 -> 51 01 -> MCU reset
-wait for measured DIAGNOSTIC_READY
+11 01 -> 51 01 -> 10 01 -> 50 01 -> delayed MCU reset
+wait for measured DIAGNOSTIC_READY after reboot
 10 01 -> 50 01
 22 DID -> 62 DID...
 ```
 
-Repeat at least 100 reset/reconnect cycles, then 1,000 post-reset transactions. Run the exact startup-race experiment at 10, 20, 50, 100, and 200 ms, plus “wait until diagnostic-ready.” Record the first RX, ISO-TP, UDS, response, TX submission, and TX completion counters together with analyzer timestamps. Do not conclude that 50 ms is the solution unless the measured readiness timeline supports it.
+Repeat at least 100 reset/reconnect cycles, then 1,000 post-reset transactions. Run the exact startup-race experiment at 10, 20, 50, 100, and 200 ms, plus “wait until diagnostic-ready.” Record the first RX, ISO-TP, UDS, response, TX submission, and TX completion counters together with analyzer timestamps. Do not conclude that the 50 ms handoff is the complete solution unless the measured readiness timeline and analyzer trace support it.
 
 ## Remaining limitations
 

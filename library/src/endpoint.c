@@ -137,15 +137,15 @@ IsoTpStatus uds_isotp_endpoint_receive(UdsIsoTpEndpoint *endpoint, const IsoTpCa
     }
     if (status != ISOTP_COMPLETE)
         return status;
-    if (uds_server_reset_pending(&endpoint->uds))
-        return ISOTP_OK;
+    /* ECUReset remains application-owned; do not block subsequent UDS services here. */
     if (event.length > UINT16_MAX)
         return ISOTP_ERR_OVERFLOW;
+    bool reset_was_pending = uds_server_reset_pending(&endpoint->uds);
     uint16_t response_length = 0U;
     UdsCallbackResult result = uds_server_handle_addressed(
         &endpoint->uds, event.payload, (uint16_t)event.length, endpoint->response, &response_length,
         (uint16_t)sizeof(endpoint->response), address_mode, now_ms);
-    bool reset_completion = response_reset_pending(&endpoint->uds);
+    bool reset_completion = !reset_was_pending && response_reset_pending(&endpoint->uds);
     if (reset_completion)
         reset_event(endpoint, UDS_RESET_EVENT_REQUESTED);
     if (result == UDS_RESULT_NO_RESPONSE) {
