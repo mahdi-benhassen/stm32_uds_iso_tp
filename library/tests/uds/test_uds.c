@@ -265,7 +265,7 @@ static void test_addressed_dispatch(void) {
                                        &response_len, sizeof(response),
                                        UDS_ADDRESS_PHYSICAL, 4U) == UDS_RESULT_OK);
     assert(response[0] == 0x7FU && response[1] == 0x11U &&
-           response[2] == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+           response[2] == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
 }
 
 static void test_uds(void) {
