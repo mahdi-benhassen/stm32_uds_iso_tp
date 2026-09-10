@@ -749,6 +749,7 @@ static UdsCallbackResult service_write_data(UdsServer *server, const uint8_t *re
     return UDS_RESULT_OK;
 #else
     (void)server;
+    (void)request_len;
     return negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
                              capacity);
 #endif
@@ -800,7 +801,9 @@ static UdsCallbackResult service_security_access(UdsServer *server, const uint8_
                                      capacity);
         }
         if (server->security_level == level) {
-            (void)memset(&response[2], 0, seed_length);
+            for (uint16_t seed_idx = 0U; seed_idx < seed_length; ++seed_idx) {
+                response[2U + seed_idx] = 0U;
+            }
             response[0] = 0x67U;
             response[1] = subfunction;
             *response_len = (uint16_t)(2U + seed_length);
