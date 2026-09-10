@@ -287,8 +287,7 @@ static uint8_t result_to_nrc(UdsCallbackResult result) {
 static const UdsServer *s_current_server = NULL;
 
 static bool nrc_suppressed_on_functional(uint8_t nrc) {
-    return (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED) ||
-           (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED) ||
+    return (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED) || (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED) ||
            (nrc == UDS_NRC_REQUEST_OUT_OF_RANGE) ||
            (nrc == UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION) ||
            (nrc == UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
@@ -733,8 +732,8 @@ static UdsCallbackResult service_write_data(UdsServer *server, const uint8_t *re
                                  capacity);
     }
     uint16_t did = read_u16(&request[1]);
-    UdsCallbackResult result = server->callbacks.write_did(
-        server->context, did, &request[3], (uint16_t)(request_len - 3U));
+    UdsCallbackResult result = server->callbacks.write_did(server->context, did, &request[3],
+                                                           (uint16_t)(request_len - 3U));
     if (result != UDS_RESULT_OK) {
         return callback_result(server, result, request, response, response_len, capacity);
     }
@@ -1174,23 +1173,23 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
     if (attribute->sid != 0U) {
         if ((attribute->address_mode != UDS_ADDRESS_MODE_BOTH) &&
             ((attribute->address_mode & address_mode) == 0U)) {
-            UdsCallbackResult res = negative_response(
-                request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response, response_len,
-                capacity);
+            UdsCallbackResult res =
+                negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+                                  response, response_len, capacity);
             s_current_server = NULL;
             return res;
         }
         if ((attribute->session_mask & session_mask(server->session)) == 0U) {
-            UdsCallbackResult res = negative_response(
-                request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION, response, response_len,
-                capacity);
+            UdsCallbackResult res =
+                negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+                                  response, response_len, capacity);
             s_current_server = NULL;
             return res;
         }
         if ((attribute->security_mask != UDS_SECURITY_MASK_NONE) &&
             ((attribute->security_mask & (uint16_t)(1U << server->security_level)) == 0U)) {
-            UdsCallbackResult res = negative_response(
-                request, UDS_NRC_SECURITY_ACCESS_DENIED, response, response_len, capacity);
+            UdsCallbackResult res = negative_response(request, UDS_NRC_SECURITY_ACCESS_DENIED,
+                                                      response, response_len, capacity);
             s_current_server = NULL;
             return res;
         }
@@ -1230,25 +1229,26 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
         result = service_io_control(server, request, request_len, response, response_len, capacity);
         break;
     case 0x31U:
-        result = service_routine_control(server, request, request_len, response, response_len,
-                                         capacity);
+        result =
+            service_routine_control(server, request, request_len, response, response_len, capacity);
         break;
     case 0x34U:
         result = service_download(server, request, request_len, response, response_len, capacity);
         break;
     case 0x36U:
-        result = service_transfer_data(server, request, request_len, response, response_len,
-                                       capacity);
+        result =
+            service_transfer_data(server, request, request_len, response, response_len, capacity);
         break;
     case 0x37U:
-        result = service_transfer_exit(server, request, request_len, response, response_len,
-                                       capacity);
+        result =
+            service_transfer_exit(server, request, request_len, response, response_len, capacity);
         break;
     case 0x3EU:
         result = service_tester_present(request, request_len, response, response_len, capacity);
         break;
     case 0x85U:
-        result = service_dtc_setting(server, request, request_len, response, response_len, capacity);
+        result =
+            service_dtc_setting(server, request, request_len, response, response_len, capacity);
         break;
     case 0x23U:
     case 0x24U:
@@ -1262,8 +1262,8 @@ UdsCallbackResult uds_server_handle_addressed(UdsServer *server, const uint8_t *
     case 0x84U:
     case 0x86U:
     case 0x87U:
-        result = service_modular_backend(server, request, request_len, response, response_len,
-                                         capacity);
+        result =
+            service_modular_backend(server, request, request_len, response, response_len, capacity);
         break;
     default:
         result = negative_response(request, UDS_NRC_SERVICE_NOT_SUPPORTED, response, response_len,
