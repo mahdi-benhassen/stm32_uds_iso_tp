@@ -109,7 +109,10 @@ void uds_security_set_secret_l1(const uint8_t *secret, uint8_t len) {
 }
 
 void svc_security_access(const uds_request_t *req, uds_response_t *resp) {
-    if ((req == NULL) || (resp == NULL) || (req->data_len < 1U)) {
+    if (resp == NULL) {
+        return;
+    }
+    if ((req == NULL) || (req->data_len < 1U)) {
         resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
         resp->data[1] = (req != NULL) ? req->sid : 0x27U;
         resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
