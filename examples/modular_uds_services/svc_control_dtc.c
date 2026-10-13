@@ -1,10 +1,5 @@
 #include "svc_control_dtc.h"
-
-static bool s_dtc_setting_enabled = true;
-
-bool dtc_is_setting_enabled(void) {
-    return s_dtc_setting_enabled;
-}
+#include "dtc_store.h"
 
 void svc_control_dtc(const uds_request_t *req, uds_response_t *resp) {
     if (req->data_len < 1U) {
@@ -27,7 +22,8 @@ void svc_control_dtc(const uds_request_t *req, uds_response_t *resp) {
         return;
     }
 
-    s_dtc_setting_enabled = (sub == 0x01U);
+    /* Subfunction 0x01: DTC Setting ON, 0x02: DTC Setting OFF */
+    dtc_set_setting_enabled(sub == 0x01U);
 
     if (suppress) {
         resp->suppress = true;

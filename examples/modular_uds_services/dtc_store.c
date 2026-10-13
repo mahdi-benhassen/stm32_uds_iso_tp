@@ -8,10 +8,25 @@
 
 static dtc_entry_t s_dtcs[DTC_MAX_ENTRIES];
 static uint8_t     s_dtc_count = 0U;
+static bool        s_dtc_setting_enabled = true;
+static dtc_status_change_fn s_status_cb = NULL;
 
 void dtc_store_init(void) {
     s_dtc_count = 0U;
+    s_dtc_setting_enabled = true;
     memset(s_dtcs, 0, sizeof(s_dtcs));
+}
+
+void dtc_store_set_status_cb(dtc_status_change_fn cb) {
+    s_status_cb = cb;
+}
+
+bool dtc_is_setting_enabled(void) {
+    return s_dtc_setting_enabled;
+}
+
+void dtc_set_setting_enabled(bool enabled) {
+    s_dtc_setting_enabled = enabled;
 }
 
 void dtc_store_add(uint32_t dtc, uint8_t status,
@@ -95,6 +110,9 @@ static void dtc_reset_entry(dtc_entry_t *e) {
     e->occurrence_counter = 0U;
     e->has_snapshot = false;
     e->has_extdata = false;
+    if (s_status_cb != NULL) {
+        s_status_cb(e->dtc, e->status);
+    }
 }
 
 bool dtc_store_clear(uint32_t group_or_dtc) {
@@ -138,6 +156,9 @@ void dtc_store_clear_all(void) {
 void dtc_process_sample(dtc_runtime_item_t *item, bool sample_failed, int8_t step_fail, int8_t step_pass) {
     if (item == NULL) return;
 
+    /* ISO 14229-1 Service 0x85 ControlDTCSetting: Freeze debouncing when setting is OFF */
+    if (!s_dtc_setting_enabled) return;
+
     if (sample_failed) {
         if ((int32_t)item->fault_detection_counter + step_fail >= FDC_THRESHOLD_FAILED) {
             item->fault_detection_counter = FDC_THRESHOLD_FAILED;
@@ -166,6 +187,18 @@ void dtc_process_sample(dtc_runtime_item_t *item, bool sample_failed, int8_t ste
         } else {
             item->fault_detection_counter = (int8_t)(item->fault_detection_counter - step_pass);
         }
+    }
+
+    /* Update central store entry if present and notify persistence callback */
+    dtc_entry_t *entry = dtc_store_find_mut(item->dtc);
+    if (entry != NULL) {
+        entry->status = item->status;
+        entry->fault_detection_counter = item->fault_detection_counter;
+        entry->aging_counter = item->aging_counter;
+        entry->occurrence_counter = item->occurrence_counter;
+    }
+    if (s_status_cb != NULL) {
+        s_status_cb(item->dtc, item->status);
     }
 }
 

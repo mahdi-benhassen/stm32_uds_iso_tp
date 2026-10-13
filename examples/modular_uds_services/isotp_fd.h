@@ -73,11 +73,22 @@ typedef struct {
     uint8_t  wft_count;
 } isotp_fd_tx_ctx_t;
 
+/* 29-bit Extended Addressing Macros (ISO 15765-2 / SAE J1939, Issue #123) */
+#define ISOTP_IS_EXT_ID(id)                 ((id) > 0x7FFU)
+#define ISOTP_CAN_ID_MASK_STD               0x7FFU
+#define ISOTP_CAN_ID_MASK_EXT               0x1FFFFFFFU
+
+#define ISOTP_29BIT_PHYS_REQ(ecu, tester)   (0x18DA0000U | ((uint32_t)(ecu) << 8U) | (uint32_t)(tester))
+#define ISOTP_29BIT_PHYS_RESP(tester, ecu)  (0x18DA0000U | ((uint32_t)(tester) << 8U) | (uint32_t)(ecu))
+#define ISOTP_29BIT_FUNC_REQ(group, tester) (0x18DB0000U | ((uint32_t)(group) << 8U) | (uint32_t)(tester))
+
 typedef struct {
     isotp_fd_rx_ctx_t rx;
     isotp_fd_tx_ctx_t tx;
     uint32_t rx_id;
     uint32_t tx_id;
+    bool     rx_is_ext;     /* True if 29-bit extended RX identifier */
+    bool     tx_is_ext;     /* True if 29-bit extended TX identifier */
     bool     use_fd;        /* True to enable 64-byte CAN-FD transmission */
     isotp_fd_tx_fn tx_cb;
     void    *tx_user;
@@ -91,6 +102,10 @@ typedef enum {
 
 void isotp_fd_init(isotp_fd_channel_t *ch, uint32_t rx_id, uint32_t tx_id,
                    bool use_fd, isotp_fd_tx_fn tx_cb, void *tx_user);
+
+void isotp_fd_init_ext(isotp_fd_channel_t *ch, uint32_t rx_id, uint32_t tx_id,
+                       bool rx_is_ext, bool tx_is_ext,
+                       bool use_fd, isotp_fd_tx_fn tx_cb, void *tx_user);
 
 void isotp_fd_on_rx(isotp_fd_channel_t *ch, const can_frame_t *frame, uint32_t now_ms);
 

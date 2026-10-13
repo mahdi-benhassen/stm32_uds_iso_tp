@@ -23,5 +23,6 @@ extern const dtc_config_entry_t g_dtc_config_85[DTC_CONFIGURED_COUNT];
  * @brief Initialize DTC store with all 85 DTCs
  */
 void dtc_store_init_85_dtcs(void);
+void dtc_table_85_init(void);
 
 #endif /* DTC_TABLE_85_H */

@@ -101,3 +101,7 @@ void dtc_store_init_85_dtcs(void) {
         dtc_store_add(g_dtc_config_85[i].dtc, 0x50U, NULL, 0U, NULL, 0U);
     }
 }
+
+void dtc_table_85_init(void) {
+    dtc_store_init_85_dtcs();
+}

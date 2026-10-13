@@ -10,6 +10,7 @@
 
 #include "dtc_store.h"
 #include "dtc_table_85.h"
+#include "dtc_nvm_adapter.h"
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -17,13 +18,17 @@
 static dtc_runtime_item_t s_runtime_dtcs[DTC_CONFIGURED_COUNT];
 
 /**
- * @brief 1. System Startup Initialization (Issue #109)
- * @details How to call dtc_store_add():
- *          Populates DTC store with initial status, empty/sample freeze frame, and extended data.
+ * @brief 1. System Startup Initialization (Issues #109, #120)
+ * @details How to call dtc_store_add() and dtc_nvm_init():
+ *          Populates DTC store with initial status, restores saved states from Flash NVM,
+ *          and initializes runtime debouncing structures.
  */
 void app_dtc_init(void) {
     /* Initialize storage and populate all 85 standard DTCs */
     dtc_store_init_85_dtcs();
+
+    /* Initialize Flash NVM wear-leveling adapter (Issue #120) */
+    dtc_nvm_init();
 
     /* Also initialize runtime monitoring structures */
     for (uint8_t i = 0; i < DTC_CONFIGURED_COUNT; i++) {
@@ -114,4 +119,7 @@ void app_on_ignition_off(void) {
             entry->aging_counter = it->aging_counter;
         }
     }
+
+    /* Flush modified DTC statuses to Flash NVM wear-leveling storage (Issue #120) */
+    dtc_nvm_flush();
 }

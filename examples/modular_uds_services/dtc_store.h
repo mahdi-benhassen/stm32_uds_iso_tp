@@ -144,4 +144,26 @@ void dtc_operation_cycle_end(dtc_runtime_item_t *items, uint8_t count);
  */
 uint8_t dtc_pack_standard_snapshot(const dtc_standard_snapshot_t *snap, uint8_t *out_buf, uint8_t max_len);
 
+/**
+ * @brief Check if DTC setting/updating is enabled (controlled via Service 0x85 ControlDTCSetting)
+ * @return True if DTC setting is enabled, false if disabled
+ */
+bool dtc_is_setting_enabled(void);
+
+/**
+ * @brief Set DTC setting/updating state (called by Service 0x85 ControlDTCSetting)
+ * @param enabled True to enable DTC recording, false to freeze DTC debouncing
+ */
+void dtc_set_setting_enabled(bool enabled);
+
+/**
+ * @brief Optional callback invoked when a DTC status changes (for NVM persistence adapter)
+ */
+typedef void (*dtc_status_change_fn)(uint32_t dtc, uint8_t status);
+
+/**
+ * @brief Register a callback for DTC status modifications
+ */
+void dtc_store_set_status_cb(dtc_status_change_fn cb);
+
 #endif /* DTC_STORE_H */

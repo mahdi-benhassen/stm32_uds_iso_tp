@@ -86,6 +86,43 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         break;
     }
 
+    case 0x03: {
+        /* reportDTCSnapshotIdentification (ISO 14229-1 Section 11.3.1.4, Issue #119) */
+        if (req->data_len != 1U) {
+            resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+            resp->data[1] = req->sid;
+            resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
+            resp->len = 3U;
+            return;
+        }
+
+        resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);
+        resp->data[1] = sub;
+        uint16_t pos = 2U;
+
+        uint8_t total = dtc_store_count();
+        for (uint8_t i = 0U; i < total; i++) {
+            const dtc_entry_t *e = dtc_store_get_by_index(i);
+            if ((e != NULL) && e->has_snapshot && (e->snapshot_len > 0U)) {
+                if ((pos + 4U) > ISOTP_TX_BUF_SIZE) {
+                    resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+                    resp->data[1] = req->sid;
+                    resp->data[2] = NRC_RESPONSE_TOO_LONG;
+                    resp->len = 3U;
+                    return;
+                }
+
+                resp->data[pos++] = (uint8_t)(e->dtc >> 16U);
+                resp->data[pos++] = (uint8_t)(e->dtc >> 8U);
+                resp->data[pos++] = (uint8_t)(e->dtc & 0xFFU);
+                resp->data[pos++] = 0x01U; /* DTCSnapshotRecordNumber = 0x01 */
+            }
+        }
+
+        resp->len = pos;
+        break;
+    }
+
     case 0x0A: {
         /* reportSupportedDTC (ISO 14229-1 Section 11.3.1.10) */
         resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);

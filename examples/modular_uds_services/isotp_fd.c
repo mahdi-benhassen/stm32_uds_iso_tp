@@ -9,8 +9,9 @@
 static bool send_can_frame(isotp_fd_channel_t *ch, uint32_t id, const uint8_t *data, uint8_t len) {
     can_frame_t f;
     memset(&f, 0, sizeof(f));
-    f.id     = id;
-    f.is_ext = (id > 0x7FFU);
+    bool is_ext = ch->tx_is_ext || (id > 0x7FFU);
+    f.id     = id & (is_ext ? ISOTP_CAN_ID_MASK_EXT : ISOTP_CAN_ID_MASK_STD);
+    f.is_ext = is_ext;
     f.is_rtr = false;
     f.is_fd  = ch->use_fd;
 
@@ -40,14 +41,24 @@ static void send_fc(isotp_fd_channel_t *ch, isotp_fc_status_t fs) {
 
 void isotp_fd_init(isotp_fd_channel_t *ch, uint32_t rx_id, uint32_t tx_id,
                    bool use_fd, isotp_fd_tx_fn tx_cb, void *tx_user) {
+    bool rx_ext = (rx_id > 0x7FFU);
+    bool tx_ext = (tx_id > 0x7FFU);
+    isotp_fd_init_ext(ch, rx_id, tx_id, rx_ext, tx_ext, use_fd, tx_cb, tx_user);
+}
+
+void isotp_fd_init_ext(isotp_fd_channel_t *ch, uint32_t rx_id, uint32_t tx_id,
+                       bool rx_is_ext, bool tx_is_ext,
+                       bool use_fd, isotp_fd_tx_fn tx_cb, void *tx_user) {
     memset(ch, 0, sizeof(*ch));
-    ch->rx_id   = rx_id;
-    ch->tx_id   = tx_id;
-    ch->use_fd  = use_fd;
-    ch->tx_cb   = tx_cb;
-    ch->tx_user = tx_user;
-    ch->rx.state = ISOTP_RX_IDLE;
-    ch->tx.state = ISOTP_TX_IDLE;
+    ch->rx_id     = rx_id;
+    ch->tx_id     = tx_id;
+    ch->rx_is_ext = rx_is_ext;
+    ch->tx_is_ext = tx_is_ext;
+    ch->use_fd    = use_fd;
+    ch->tx_cb     = tx_cb;
+    ch->tx_user   = tx_user;
+    ch->rx.state  = ISOTP_RX_IDLE;
+    ch->tx.state  = ISOTP_TX_IDLE;
 }
 
 static void handle_sf(isotp_fd_channel_t *ch, const can_frame_t *frame) {
@@ -173,7 +184,13 @@ static void handle_fc_rx(isotp_fd_channel_t *ch, const can_frame_t *frame, uint3
 }
 
 void isotp_fd_on_rx(isotp_fd_channel_t *ch, const can_frame_t *frame, uint32_t now_ms) {
-    if (frame->dlc < 1U) return;
+    if ((ch == NULL) || (frame == NULL) || (frame->dlc < 1U)) return;
+
+    /* Extended / Standard ID matching (Issue #123) */
+    if (frame->is_ext != ch->rx_is_ext) return;
+    uint32_t mask = ch->rx_is_ext ? ISOTP_CAN_ID_MASK_EXT : ISOTP_CAN_ID_MASK_STD;
+    if ((frame->id & mask) != (ch->rx_id & mask)) return;
+
     isotp_pci_type_t pci = (isotp_pci_type_t)(frame->data[0] >> 4U);
     switch (pci) {
     case ISOTP_PCI_SF: handle_sf(ch, frame); break;
