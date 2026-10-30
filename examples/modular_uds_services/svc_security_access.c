@@ -8,6 +8,7 @@
 
 #include "svc_security_access.h"
 #include "crypto_aes_cmac.h"
+#include "uds_server.h"
 #include <string.h>
 
 static security_state_t s_sec_state = SECURITY_LOCKED;
@@ -63,15 +64,17 @@ void uds_security_reset(void) {
 }
 
 bool uds_security_is_unlocked(void) {
-    return (s_active_security_mask != UDS_SEC_LEVEL_LOCKED);
+    return ((s_active_security_mask != UDS_SEC_LEVEL_LOCKED) ||
+            (uds_server_get_security_level() != UDS_SEC_LEVEL_LOCKED));
 }
 
 bool uds_security_is_level_unlocked(uint8_t level) {
+    uint32_t combined = s_active_security_mask | uds_server_get_security_level();
     if (level == 1U) {
-        return ((s_active_security_mask & UDS_SEC_LEVEL_1) != 0U);
+        return ((combined & UDS_SEC_LEVEL_1) != 0U);
     }
     if (level == 2U) {
-        return ((s_active_security_mask & UDS_SEC_LEVEL_2) != 0U);
+        return ((combined & UDS_SEC_LEVEL_2) != 0U);
     }
     return false;
 }

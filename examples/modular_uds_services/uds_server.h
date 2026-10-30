@@ -96,6 +96,11 @@ void uds_server_set_session(uint8_t session_mask);
  */
 uint8_t uds_server_get_session(void);
 
+/**
+ * @brief UDS Service 0x29 Authentication handler
+ */
+void svc_authentication(const uds_request_t *req, uds_response_t *resp);
+
 #ifdef __cplusplus
 }
 #endif

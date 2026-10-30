@@ -1,7 +1,7 @@
 /**
  * @file uds_server.c
  * @brief Complete UDS Unified Server Framework Implementation (ISO 14229-1)
- * @details Complete drop-in replacement with 21 service dispatch table, session, addressing, and security gates.
+ * @details Unified dispatch table supporting multi-level security masks, sessions, and addressing modes.
  */
 
 #include <string.h>
@@ -9,11 +9,12 @@
 #include "uds_session.h"
 #include "uds_config.h"
 
-/* Service handler headers (library-provided) */
+/* Service handler headers */
 #include "svc_diag_session.h"
 #include "svc_ecu_reset.h"
 #include "svc_tester_present.h"
 #include "svc_security_access.h"
+#include "svc_authentication.h"
 #include "svc_read_did.h"
 #include "svc_write_did.h"
 #include "svc_read_dtc.h"
@@ -29,31 +30,6 @@
 #include "svc_control_dtc.h"
 #include "svc_read_address.h"
 #include "svc_write_address.h"
-
-/* ── Weak fallback declarations for standalone compilation ───────── */
-#if defined(__GNUC__) || defined(__clang__)
-#define UDS_WEAK __attribute__((weak))
-#else
-#define UDS_WEAK
-#endif
-
-UDS_WEAK void uds_session_refresh(void) { }
-UDS_WEAK bool uds_session_check_timeout(void) { return false; }
-UDS_WEAK void uds_reset_poll(void) { }
-UDS_WEAK void uds_state_init(void) { }
-UDS_WEAK void svc_diag_session_control(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_ecu_reset(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_tester_present(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_read_data_by_id(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_write_data_by_id(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_request_download(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_request_upload(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_transfer_data(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_transfer_exit(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_read_periodic_id(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_dyn_define_did(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_io_control(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
-UDS_WEAK void svc_link_control(const uds_request_t *r, uds_response_t *p) { (void)r; (void)p; }
 
 /* ── App config storage ───────────────────────────────────────────── */
 
@@ -84,15 +60,16 @@ static void register_service_ext(uint8_t sid, uds_service_handler_t handler,
 }
 
 static void register_service(uint8_t sid, uds_service_handler_t handler,
-                             uint8_t session_mask, bool requires_security) {
-    uint32_t sec_mask = requires_security ? (UDS_SEC_LEVEL_1 | UDS_SEC_LEVEL_2) : UDS_SEC_LEVEL_ALL;
+                             uint8_t session_mask, uint32_t security_mask) {
     uint32_t addr_mask = UDS_ADDR_ALL;
-    if ((sid == 0x23U) || (sid == 0x27U) || (sid == 0x2AU) || (sid == 0x2CU) ||
-        (sid == 0x2EU) || (sid == 0x2FU) || (sid == 0x31U) || (sid == 0x34U) ||
-        (sid == 0x35U) || (sid == 0x36U) || (sid == 0x37U) || (sid == 0x3DU) || (sid == 0x87U)) {
+    if ((sid == 0x23U) || (sid == 0x27U) || (sid == 0x29U) || (sid == 0x2AU) ||
+        (sid == 0x2CU) || (sid == 0x2EU) || (sid == 0x2FU) || (sid == 0x31U) ||
+        (sid == 0x34U) || (sid == 0x35U) || (sid == 0x36U) || (sid == 0x37U) ||
+        (sid == 0x3DU) || (sid == 0x87U)) {
         addr_mask = UDS_ADDR_PHYSICAL;
     }
-    register_service_ext(sid, handler, session_mask, requires_security, addr_mask, sec_mask);
+    bool requires_security = (security_mask != UDS_SEC_LEVEL_LOCKED);
+    register_service_ext(sid, handler, session_mask, requires_security, addr_mask, security_mask);
 }
 
 static void build_nrc(uds_response_t *resp, uint8_t sid, uint8_t nrc) {
@@ -120,29 +97,30 @@ void uds_server_init(const uds_app_config_t *config) {
     s_active_security_mask = UDS_SEC_LEVEL_LOCKED;
     s_active_session_mask  = SESSION_MASK_DEFAULT;
 
-    /* Install all 21 UDS base services (ISO 14229-1) */
+    /* Install all UDS base services (ISO 14229-1) with multi-level security masks */
     /*               SID   handler                     session_mask                                   security */
-    register_service(0x10, svc_diag_session_control,    SESSION_MASK_ALL,                                 false);
-    register_service(0x11, svc_ecu_reset,               SESSION_MASK_ALL,                                 false);
-    register_service(0x14, svc_clear_dtc,               SESSION_MASK_NON_DEFAULT,                         false);
-    register_service(0x19, svc_read_dtc_info,           SESSION_MASK_ALL,                                 false);
-    register_service(0x22, svc_read_data_by_id,         SESSION_MASK_ALL,                                 false);
-    register_service(0x23, svc_read_memory_by_address,  SESSION_MASK_ALL,                                 false);
-    register_service(0x27, svc_security_access,         SESSION_MASK_NON_DEFAULT,                         false);
-    register_service(0x28, svc_comm_control,            SESSION_MASK_ALL,                                 false);
-    register_service(0x2A, svc_read_periodic_id,        SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, false);
-    register_service(0x2C, svc_dyn_define_did,          SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, false);
-    register_service(0x2E, svc_write_data_by_id,        SESSION_MASK_NON_DEFAULT,                         true);
-    register_service(0x2F, svc_io_control,              SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, false);
-    register_service(0x31, svc_routine_control,         SESSION_MASK_ALL,                                 false);
-    register_service(0x34, svc_request_download,        SESSION_MASK_PROGRAMMING,                         true);
-    register_service(0x35, svc_request_upload,          SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, true);
-    register_service(0x36, svc_transfer_data,           SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, true);
-    register_service(0x37, svc_transfer_exit,           SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, true);
-    register_service(0x3E, svc_tester_present,          SESSION_MASK_ALL,                                 false);
-    register_service(0x3D, svc_write_memory_by_address, SESSION_MASK_ALL,                                 false);
-    register_service(0x85, svc_control_dtc,             SESSION_MASK_ALL,                                 false);
-    register_service(0x87, svc_link_control,            SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, false);
+    register_service(0x10, svc_diag_session_control,    SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x11, svc_ecu_reset,               SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x14, svc_clear_dtc,               SESSION_MASK_NON_DEFAULT,                         UDS_SEC_LEVEL_LOCKED);
+    register_service(0x19, svc_read_dtc_info,           SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x22, svc_read_data_by_id,         SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x23, svc_read_memory_by_address,  SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x27, svc_security_access,         SESSION_MASK_NON_DEFAULT,                         UDS_SEC_LEVEL_LOCKED);
+    register_service(0x28, svc_comm_control,            SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x29, svc_authentication,          SESSION_MASK_NON_DEFAULT,                         UDS_SEC_LEVEL_LOCKED);
+    register_service(0x2A, svc_read_periodic_id,        SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, UDS_SEC_LEVEL_LOCKED);
+    register_service(0x2C, svc_dyn_define_did,          SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, UDS_SEC_LEVEL_LOCKED);
+    register_service(0x2E, svc_write_data_by_id,        SESSION_MASK_NON_DEFAULT,                         UDS_SEC_LEVEL_1);
+    register_service(0x2F, svc_io_control,              SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, UDS_SEC_LEVEL_LOCKED);
+    register_service(0x31, svc_routine_control,         SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x34, svc_request_download,        SESSION_MASK_PROGRAMMING,                         UDS_SEC_LEVEL_1);
+    register_service(0x35, svc_request_upload,          SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, UDS_SEC_LEVEL_2);
+    register_service(0x36, svc_transfer_data,           SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, UDS_SEC_LEVEL_2);
+    register_service(0x37, svc_transfer_exit,           SESSION_MASK_PROGRAMMING | SESSION_MASK_EXTENDED, UDS_SEC_LEVEL_2);
+    register_service(0x3E, svc_tester_present,          SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x3D, svc_write_memory_by_address, SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x85, svc_control_dtc,             SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
+    register_service(0x87, svc_link_control,            SESSION_MASK_EXTENDED | SESSION_MASK_ENGINEERING, UDS_SEC_LEVEL_LOCKED);
 
     uds_state_init();
 }
@@ -173,7 +151,10 @@ uint8_t uds_server_get_session(void) {
 
 bool uds_server_process(const uint8_t *data, uint16_t len,
                         bool functional, uds_response_t *resp) {
-    if ((data == NULL) || (len < 1U) || (resp == NULL)) {
+    if (resp == NULL) {
+        return false;
+    }
+    if ((data == NULL) || (len < 1U)) {
         return false;
     }
 
@@ -211,16 +192,13 @@ bool uds_server_process(const uint8_t *data, uint16_t len,
         return true;
     }
 
-    /* 3. Security Access Gate */
-    if (entry->requires_security && (s_active_security_mask == UDS_SEC_LEVEL_LOCKED)) {
-        if (functional) return false;
-        build_nrc(resp, sid, NRC_SECURITY_ACCESS_DENIED);
-        return true;
-    }
-    if ((entry->securityMask & s_active_security_mask) == 0U) {
-        if (functional) return false;
-        build_nrc(resp, sid, NRC_SECURITY_ACCESS_DENIED);
-        return true;
+    /* 3. Security Access Gate with Multi-Level Differentiation */
+    if (entry->securityMask != UDS_SEC_LEVEL_LOCKED) {
+        if ((entry->securityMask & s_active_security_mask) == 0U) {
+            if (functional) return false;
+            build_nrc(resp, sid, NRC_SECURITY_ACCESS_DENIED);
+            return true;
+        }
     }
 
     /* Build request and dispatch */
@@ -266,4 +244,3 @@ uint8_t uds_server_dispatch_get_session(void) {
 bool uds_server_dispatch_process(const uint8_t *data, uint16_t len, bool functional, uds_response_t *resp) {
     return uds_server_process(data, len, functional, resp);
 }
-
