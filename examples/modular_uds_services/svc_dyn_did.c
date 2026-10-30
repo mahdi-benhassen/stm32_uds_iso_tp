@@ -93,7 +93,7 @@ void svc_dyn_define_did(const uds_request_t *req, uds_response_t *resp) {
             return;
         }
 
-        uint8_t composite[UDS_DID_MAX_DATA_LEN];
+        uint8_t composite[UDS_DID_MAX_DATA_LEN] = { 0 };
         uint16_t comp_pos = 0U;
 
         for (uint8_t i = 0U; i < slice_count; i++) {
