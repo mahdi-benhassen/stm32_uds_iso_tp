@@ -932,6 +932,64 @@ static void test_issue_143_session_jump_fsm(void) {
     printf("       Issue #143 passed!\n");
 }
 
+/* ── Test: Issue #145 - Service 0x19 0x14 & 0x15 (FDC & Permanent DTCs) ── */
+static void test_issue_145_read_dtc_14_15(void) {
+    printf("[TEST] Running Issue #145: Service 0x19 0x14 & 0x15 ...\n");
+
+    uds_server_init(NULL);
+    dtc_store_init();
+
+    /* Add test DTCs:
+     * DTC 1: 0xD00616 with FDC = 45 (pre-failed counter 1..126)
+     * DTC 2: 0xD00617 with FDC = 0, permanent = true, status = 0x2F
+     */
+    dtc_store_add(0xD00616U, 0x01U, NULL, 0U, NULL, 0U);
+    dtc_entry_t *e1 = dtc_store_find_mut(0xD00616U);
+    assert(e1 != NULL);
+    e1->fault_detection_counter = 45;
+
+    dtc_store_add(0xD00617U, 0x2FU, NULL, 0U, NULL, 0U);
+    dtc_store_set_permanent(0xD00617U, true);
+    assert(dtc_store_is_permanent(0xD00617U) == true);
+
+    uds_response_t resp;
+
+    /* 1. Subfunction 0x14: reportDTCFaultDetectionCounter */
+    uint8_t req_14[2] = { 0x19U, 0x14U };
+    bool ok = uds_server_process(req_14, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x14U);
+    assert(resp.len == 6U); /* 59 14 + [D0 06 16 2D] (45 = 0x2D) */
+    assert(resp.data[2] == 0xD0U);
+    assert(resp.data[3] == 0x06U);
+    assert(resp.data[4] == 0x16U);
+    assert(resp.data[5] == 45U);
+
+    /* 2. Subfunction 0x15: reportDTCWithPermanentStatus */
+    uint8_t req_15[2] = { 0x19U, 0x15U };
+    ok = uds_server_process(req_15, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x15U);
+    assert(resp.data[2] == 0xFFU); /* Availability mask */
+    assert(resp.len == 7U); /* 59 15 FF + [D0 06 17 2F] */
+    assert(resp.data[3] == 0xD0U);
+    assert(resp.data[4] == 0x06U);
+    assert(resp.data[5] == 0x17U);
+    assert(resp.data[6] == 0x2FU);
+
+    /* 3. Length validation check for 0x14 and 0x15 (extra bytes -> NRC 0x13) */
+    uint8_t req_invalid[3] = { 0x19U, 0x14U, 0x00U };
+    ok = uds_server_process(req_invalid, 3U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x7FU);
+    assert(resp.data[1] == 0x19U);
+    assert(resp.data[2] == NRC_INCORRECT_MSG_LEN_OR_FORMAT);
+
+    printf("       Issue #145 passed!\n");
+}
+
 int main(void) {
     printf("===================================================\n");
     printf("  Executing Modular UDS Full Verification Suite\n");
@@ -958,9 +1016,10 @@ int main(void) {
     test_issue_140_single_bank_bootloader();
     test_issue_141_service_29_authentication();
     test_issue_143_session_jump_fsm();
+    test_issue_145_read_dtc_14_15();
 
     printf("===================================================\n");
-    printf("  ALL 19 VERIFICATION TESTS PASSED! (100%% SUCCESS)\n");
+    printf("  ALL 21 VERIFICATION TESTS PASSED! (100%% SUCCESS)\n");
     printf("===================================================\n");
     return 0;
 }

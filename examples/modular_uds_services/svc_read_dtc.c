@@ -248,6 +248,88 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         break;
     }
 
+    case 0x14: {
+        /* reportDTCFaultDetectionCounter (ISO 14229-1 Section 11.3.1.14, Issue #145) */
+        if (req->data_len != 1U) {
+            resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+            resp->data[1] = req->sid;
+            resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
+            resp->len = 3U;
+            return;
+        }
+
+        resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);
+        resp->data[1] = sub;
+        uint16_t pos = 2U;
+
+        uint8_t total = dtc_store_count();
+        for (uint8_t i = 0U; i < total; i++) {
+            const dtc_entry_t *e = dtc_store_get_by_index(i);
+            if (e == NULL) {
+                continue;
+            }
+
+            /* Report DTC if faultDetectionCounter is in prefailed range (1..126) */
+            if ((e->fault_detection_counter > 0) && (e->fault_detection_counter <= 126)) {
+                if ((pos + 4U) > ISOTP_TX_BUF_SIZE) {
+                    resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+                    resp->data[1] = req->sid;
+                    resp->data[2] = NRC_RESPONSE_TOO_LONG;
+                    resp->len = 3U;
+                    return;
+                }
+
+                resp->data[pos++] = (uint8_t)(e->dtc >> 16U);
+                resp->data[pos++] = (uint8_t)(e->dtc >> 8U);
+                resp->data[pos++] = (uint8_t)(e->dtc & 0xFFU);
+                resp->data[pos++] = (uint8_t)e->fault_detection_counter;
+            }
+        }
+
+        resp->len = pos;
+        break;
+    }
+
+    case 0x15: {
+        /* reportDTCWithPermanentStatus (ISO 14229-1 Section 11.3.1.15, Issue #145) */
+        if (req->data_len != 1U) {
+            resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+            resp->data[1] = req->sid;
+            resp->data[2] = NRC_INCORRECT_MSG_LEN_OR_FORMAT;
+            resp->len = 3U;
+            return;
+        }
+
+        resp->data[0] = UDS_POSITIVE_RESPONSE(req->sid);
+        resp->data[1] = sub;
+        resp->data[2] = avail_mask;
+        uint16_t pos = 3U;
+
+        uint8_t total = dtc_store_count();
+        for (uint8_t i = 0U; i < total; i++) {
+            const dtc_entry_t *e = dtc_store_get_by_index(i);
+            if ((e == NULL) || (!e->is_permanent)) {
+                continue;
+            }
+
+            if ((pos + 4U) > ISOTP_TX_BUF_SIZE) {
+                resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+                resp->data[1] = req->sid;
+                resp->data[2] = NRC_RESPONSE_TOO_LONG;
+                resp->len = 3U;
+                return;
+            }
+
+            resp->data[pos++] = (uint8_t)(e->dtc >> 16U);
+            resp->data[pos++] = (uint8_t)(e->dtc >> 8U);
+            resp->data[pos++] = (uint8_t)(e->dtc & 0xFFU);
+            resp->data[pos++] = e->status;
+        }
+
+        resp->len = pos;
+        break;
+    }
+
     default:
         resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
         resp->data[1] = req->sid;

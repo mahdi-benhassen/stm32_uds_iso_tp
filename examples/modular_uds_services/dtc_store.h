@@ -87,6 +87,7 @@ typedef struct {
     bool     has_extdata;                   /**< Extended data available */
     uint8_t  extdata[DTC_EXTDATA_SIZE];     /**< Extended data payload */
     uint8_t  extdata_len;
+    bool     is_permanent;                  /**< Permanent DTC flag */
 } dtc_entry_t;
 
 /* ── Core Management API ── */
@@ -117,6 +118,10 @@ const dtc_entry_t *dtc_store_find(uint32_t dtc);
 bool dtc_store_clear(uint32_t group_or_dtc);
 
 void dtc_store_clear_all(void);
+
+void dtc_store_set_permanent(uint32_t dtc, bool permanent);
+
+bool dtc_store_is_permanent(uint32_t dtc);
 
 /* ── Fault Debouncing & Lifecycle API (Issues #109, #110, #111, #112) ── */
 
