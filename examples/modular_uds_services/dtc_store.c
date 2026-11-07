@@ -40,6 +40,7 @@ void dtc_store_add(uint32_t dtc, uint8_t status,
     memset(e, 0, sizeof(*e));
     e->dtc = dtc & 0x00FFFFFFU;
     e->status = status;
+    e->is_active = ((status & 0x2FU) != 0U);
     e->fault_detection_counter = 0;
     e->aging_counter = 0U;
     e->occurrence_counter = 0U;
@@ -68,7 +69,7 @@ uint8_t dtc_store_get_status_mask(void) {
 uint16_t dtc_store_count_by_mask(uint8_t status_mask) {
     uint16_t count = 0U;
     for (uint8_t i = 0U; i < s_dtc_count; i++) {
-        if ((s_dtcs[i].status & status_mask) != 0U) {
+        if (s_dtcs[i].is_active && ((s_dtcs[i].status & status_mask) != 0U)) {
             count++;
         }
     }
@@ -110,6 +111,7 @@ static void dtc_reset_entry(dtc_entry_t *e) {
     e->occurrence_counter = 0U;
     e->has_snapshot = false;
     e->has_extdata = false;
+    e->is_active = false;
     if (s_status_cb != NULL) {
         s_status_cb(e->dtc, e->status);
     }
@@ -152,6 +154,19 @@ bool dtc_store_clear(uint32_t group_or_dtc) {
 void dtc_store_clear_all(void) {
     (void)dtc_store_clear(0x00FFFFFFU);
 }
+
+void dtc_store_set_active(uint32_t dtc, bool active) {
+    dtc_entry_t *e = dtc_store_find_mut(dtc);
+    if (e != NULL) {
+        e->is_active = active;
+    }
+}
+
+bool dtc_store_is_active(uint32_t dtc) {
+    const dtc_entry_t *e = dtc_store_find(dtc);
+    return (e != NULL) ? e->is_active : false;
+}
+
 
 void dtc_process_sample(dtc_runtime_item_t *item, bool sample_failed, int8_t step_fail, int8_t step_pass) {
     if (item == NULL) return;
@@ -196,6 +211,7 @@ void dtc_process_sample(dtc_runtime_item_t *item, bool sample_failed, int8_t ste
         entry->fault_detection_counter = item->fault_detection_counter;
         entry->aging_counter = item->aging_counter;
         entry->occurrence_counter = item->occurrence_counter;
+        entry->is_active = ((item->status & 0x2FU) != 0U);
     }
     if (s_status_cb != NULL) {
         s_status_cb(item->dtc, item->status);

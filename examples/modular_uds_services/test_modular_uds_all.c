@@ -874,6 +874,82 @@ static void test_issue_141_service_29_authentication(void) {
     printf("       Issue #141 passed!\n");
 }
 
+/* ── Test: Issue #148 - 0x14 Clear DTC in Default Session & 0x19 01 verification ── */
+static void test_issue_148_clear_dtc_default_session(void) {
+    printf("[TEST] Running Issue #148: Service 0x14 in Default Session & Count Reset ...\n");
+
+    uds_server_init(NULL);
+    dtc_table_85_init();
+    assert(uds_session_get() == UDS_SESSION_DEFAULT);
+    assert(dtc_store_count() == DTC_CONFIGURED_COUNT);
+
+    uds_response_t resp;
+
+    /* 1. On power-on, initial status is 0x50; active fault count must be 0 */
+    uint8_t req_19_01[3] = { 0x19U, 0x01U, 0xFFU };
+    bool ok = uds_server_process(req_19_01, 3U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x01U);
+    uint16_t initial_faults = (uint16_t)(((uint16_t)resp.data[4] << 8U) | (uint16_t)resp.data[5]);
+    assert(initial_faults == 0U);
+
+    /* 2. Supported DTCs report (0x0A) must still list all 85 configured DTCs */
+    uint8_t req_19_0a[2] = { 0x19U, 0x0AU };
+    ok = uds_server_process(req_19_0a, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x0AU);
+    uint16_t supported_items = (uint16_t)((resp.len - 3U) / 4U);
+    assert(supported_items == DTC_CONFIGURED_COUNT);
+
+    /* 3. Qualify 3 active faults */
+    dtc_entry_t *e1 = dtc_store_find_mut(0xF00614U);
+    assert(e1 != NULL);
+    e1->status = 0x2FU; /* Confirmed & pending */
+    e1->is_active = true;
+
+    dtc_entry_t *e2 = dtc_store_find_mut(0xF00615U);
+    assert(e2 != NULL);
+    e2->status = 0x2FU;
+    e2->is_active = true;
+
+    dtc_entry_t *e3 = dtc_store_find_mut(0xD00616U);
+    assert(e3 != NULL);
+    e3->status = 0x2FU;
+    e3->is_active = true;
+
+    ok = uds_server_process(req_19_01, 3U, false, &resp);
+    assert(ok == true);
+    uint16_t qualified_count = (uint16_t)(((uint16_t)resp.data[4] << 8U) | (uint16_t)resp.data[5]);
+    assert(qualified_count == 3U);
+
+    /* 4. Issue 0x14 FF FF FF in Default Session -> MUST succeed (Positive Response 0x54) */
+    uint8_t req_14_clear[4] = { 0x14U, 0xFFU, 0xFFU, 0xFFU };
+    ok = uds_server_process(req_14_clear, 4U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x54U);
+    assert(resp.len == 1U);
+
+    /* 5. Query 0x19 01 FF again -> Count MUST be 0 */
+    ok = uds_server_process(req_19_01, 3U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x01U);
+    uint16_t post_clear_count = (uint16_t)(((uint16_t)resp.data[4] << 8U) | (uint16_t)resp.data[5]);
+    assert(post_clear_count == 0U);
+
+    /* 6. Query 0x19 02 FF (reportDTCByStatusMask) -> Record list MUST be empty (3 bytes header only) */
+    uint8_t req_19_02[3] = { 0x19U, 0x02U, 0xFFU };
+    ok = uds_server_process(req_19_02, 3U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x59U);
+    assert(resp.data[1] == 0x02U);
+    assert(resp.len == 3U); /* [0x59, 0x02, availabilityMask] */
+
+    printf("       Issue #148 passed!\n");
+}
+
 int main(void) {
     printf("===================================================\n");
     printf("  Executing Modular UDS Full Verification Suite\n");
@@ -899,6 +975,7 @@ int main(void) {
     test_issue_138_139_security_gate_levels();
     test_issue_140_single_bank_bootloader();
     test_issue_141_service_29_authentication();
+    test_issue_148_clear_dtc_default_session();
 
     printf("===================================================\n");
     printf("  ALL 19 VERIFICATION TESTS PASSED! (100%% SUCCESS)\n");

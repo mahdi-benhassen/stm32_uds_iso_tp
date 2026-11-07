@@ -64,7 +64,7 @@ void svc_read_dtc_info(const uds_request_t *req, uds_response_t *resp) {
         uint8_t total = dtc_store_count();
         for (uint8_t i = 0U; i < total; i++) {
             const dtc_entry_t *e = dtc_store_get_by_index(i);
-            if ((e == NULL) || ((e->status & req_mask) == 0U)) {
+            if ((e == NULL) || (!e->is_active) || ((e->status & req_mask) == 0U)) {
                 continue;
             }
 
