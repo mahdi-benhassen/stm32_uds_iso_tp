@@ -874,6 +874,32 @@ static void test_issue_141_service_29_authentication(void) {
     printf("       Issue #141 passed!\n");
 }
 
+/* ── Test: Issue #146 - Server Polling & Tick Gating (uds_server_poll_ms) ── */
+static void test_issue_146_server_poll_timing(void) {
+    printf("[TEST] Running Issue #146: Server Polling Timing (uds_server_poll_ms) ...\n");
+
+    uds_server_init(NULL);
+    uds_session_set(UDS_SESSION_EXTENDED);
+    assert(uds_session_get() == UDS_SESSION_EXTENDED);
+
+    /* 1. Simulate fast while(1) loop calling uds_server_poll_ms 10,000 times with same tick */
+    for (uint32_t i = 0U; i < 10000U; i++) {
+        uds_server_poll_ms(1000U);
+    }
+    /* S3 timer must NOT have expired because 0 ms elapsed */
+    assert(uds_session_get() == UDS_SESSION_EXTENDED);
+
+    /* 2. Advance time by 4999 ms -> S3 (5000ms) should still be active */
+    uds_server_poll_ms(5999U);
+    assert(uds_session_get() == UDS_SESSION_EXTENDED);
+
+    /* 3. Advance by 1 more ms to reach 5000 ms elapsed -> S3 timeout resets session to DEFAULT */
+    uds_server_poll_ms(6000U);
+    assert(uds_session_get() == UDS_SESSION_DEFAULT);
+
+    printf("       Issue #146 passed!\n");
+}
+
 int main(void) {
     printf("===================================================\n");
     printf("  Executing Modular UDS Full Verification Suite\n");
@@ -899,6 +925,7 @@ int main(void) {
     test_issue_138_139_security_gate_levels();
     test_issue_140_single_bank_bootloader();
     test_issue_141_service_29_authentication();
+    test_issue_146_server_poll_timing();
 
     printf("===================================================\n");
     printf("  ALL 19 VERIFICATION TESTS PASSED! (100%% SUCCESS)\n");
