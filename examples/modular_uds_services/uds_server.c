@@ -101,7 +101,7 @@ void uds_server_init(const uds_app_config_t *config) {
     /*               SID   handler                     session_mask                                   security */
     register_service(0x10, svc_diag_session_control,    SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
     register_service(0x11, svc_ecu_reset,               SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
-    register_service(0x14, svc_clear_dtc,               SESSION_MASK_NON_DEFAULT,                         UDS_SEC_LEVEL_LOCKED);
+    register_service(0x14, svc_clear_dtc,               SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
     register_service(0x19, svc_read_dtc_info,           SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
     register_service(0x22, svc_read_data_by_id,         SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
     register_service(0x23, svc_read_memory_by_address,  SESSION_MASK_ALL,                                 UDS_SEC_LEVEL_LOCKED);
