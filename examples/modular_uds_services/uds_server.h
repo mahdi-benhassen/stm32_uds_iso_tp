@@ -72,9 +72,21 @@ bool uds_server_process(const uint8_t *data, uint16_t len,
                         bool functional, uds_response_t *resp);
 
 /**
- * @brief Periodic background task (handles S3 timeout, security lockout, and ECU reset)
+ * @brief Periodic 1ms background tick (handles S3 timeout, security lockout, and ECU reset).
+ * @note  Call this function inside a 1ms timer interrupt (e.g. SysTick_Handler or TIMx_IRQHandler).
+ *        If calling from a bare-metal while(1) main loop without a hardware timer interrupt,
+ *        use uds_server_poll_ms(HAL_GetTick()) instead to prevent rapid timer expiration.
  */
 void uds_server_poll(void);
+
+/**
+ * @brief Tick-aware background polling for superloop / main while(1) tasks (Issue #146).
+ * @param current_tick_ms Current monotonic millisecond timestamp (e.g., HAL_GetTick()).
+ * @details Compares current_tick_ms against the last processed timestamp and executes
+ *          uds_server_poll() only for each elapsed millisecond, safely preventing S3 and
+ *          lockout timer acceleration in unthrottled main loops.
+ */
+void uds_server_poll_ms(uint32_t current_tick_ms);
 
 /**
  * @brief Set currently active security level bitmask

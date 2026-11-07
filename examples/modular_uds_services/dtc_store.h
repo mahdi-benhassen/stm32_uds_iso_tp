@@ -88,6 +88,7 @@ typedef struct {
     uint8_t  extdata[DTC_EXTDATA_SIZE];     /**< Extended data payload */
     uint8_t  extdata_len;
     bool     is_active;                     /**< Fault is actively qualified / present */
+    bool     is_permanent;                  /**< Permanent DTC flag */
 } dtc_entry_t;
 
 /* ── Core Management API ── */
@@ -122,6 +123,10 @@ void dtc_store_clear_all(void);
 void dtc_store_set_active(uint32_t dtc, bool active);
 
 bool dtc_store_is_active(uint32_t dtc);
+
+void dtc_store_set_permanent(uint32_t dtc, bool permanent);
+
+bool dtc_store_is_permanent(uint32_t dtc);
 
 /* ── Fault Debouncing & Lifecycle API (Issues #109, #110, #111, #112) ── */
 

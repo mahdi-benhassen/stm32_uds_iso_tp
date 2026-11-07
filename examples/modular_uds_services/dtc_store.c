@@ -98,6 +98,10 @@ const dtc_entry_t *dtc_store_find(uint32_t dtc) {
 }
 
 static void dtc_reset_entry(dtc_entry_t *e) {
+    /* ISO 14229-1: Permanent DTCs cannot be erased by Service 0x14 */
+    if (e->is_permanent) {
+        return;
+    }
     /* ISO 14229-1 status reset on 0x14 ClearDiagnosticInformation */
     e->status &= (uint8_t)~(DTC_STATUS_TEST_FAILED |
                             DTC_STATUS_TEST_FAILED_THIS_CYCLE |
@@ -165,6 +169,18 @@ void dtc_store_set_active(uint32_t dtc, bool active) {
 bool dtc_store_is_active(uint32_t dtc) {
     const dtc_entry_t *e = dtc_store_find(dtc);
     return (e != NULL) ? e->is_active : false;
+}
+
+void dtc_store_set_permanent(uint32_t dtc, bool permanent) {
+    dtc_entry_t *e = dtc_store_find_mut(dtc);
+    if (e != NULL) {
+        e->is_permanent = permanent;
+    }
+}
+
+bool dtc_store_is_permanent(uint32_t dtc) {
+    const dtc_entry_t *e = dtc_store_find(dtc);
+    return (e != NULL) ? e->is_permanent : false;
 }
 
 

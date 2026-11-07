@@ -10,6 +10,47 @@
 #define UDS_P2_SERVER_MAX_MS       50U     /* 50 ms standard P2 server */
 #define UDS_P2_STAR_SERVER_MAX_RES 500U    /* 5000 ms (resolution 10ms -> 500) */
 
+static bool isValidSessionTransition(uds_session_t current, uint8_t target) {
+    if ((uint8_t)current == target) {
+        return true;
+    }
+
+    switch (current) {
+    case UDS_SESSION_DEFAULT:
+        if ((target == (uint8_t)UDS_SESSION_EXTENDED) ||
+            (target == (uint8_t)UDS_SESSION_ENGINEERING)) {
+            return true;
+        }
+        /* Direct transition Default -> Programming is forbidden (NRC 0x22) */
+        return false;
+
+    case UDS_SESSION_EXTENDED:
+        if ((target == (uint8_t)UDS_SESSION_DEFAULT) ||
+            (target == (uint8_t)UDS_SESSION_PROGRAMMING) ||
+            (target == (uint8_t)UDS_SESSION_ENGINEERING)) {
+            return true;
+        }
+        return false;
+
+    case UDS_SESSION_PROGRAMMING:
+        if (target == (uint8_t)UDS_SESSION_DEFAULT) {
+            return true;
+        }
+        /* Programming directly to Extended or Engineering is forbidden */
+        return false;
+
+    case UDS_SESSION_ENGINEERING:
+        if ((target == (uint8_t)UDS_SESSION_DEFAULT) ||
+            (target == (uint8_t)UDS_SESSION_EXTENDED)) {
+            return true;
+        }
+        return false;
+
+    default:
+        return (target == (uint8_t)UDS_SESSION_DEFAULT);
+    }
+}
+
 void svc_diag_session_control(const uds_request_t *req, uds_response_t *resp) {
     if (resp == NULL) {
         return;
@@ -30,6 +71,14 @@ void svc_diag_session_control(const uds_request_t *req, uds_response_t *resp) {
         resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
         resp->data[1] = req->sid;
         resp->data[2] = NRC_SUBFUNCTION_NOT_SUPPORTED;
+        resp->len = 3U;
+        return;
+    }
+
+    if (!isValidSessionTransition(uds_session_get(), sub)) {
+        resp->data[0] = UDS_SID_NEGATIVE_RESPONSE;
+        resp->data[1] = req->sid;
+        resp->data[2] = NRC_CONDITIONS_NOT_CORRECT;
         resp->len = 3U;
         return;
     }

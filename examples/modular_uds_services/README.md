@@ -28,3 +28,35 @@ This directory provides standalone, modular implementations of core ISO 14229-1 
 - **Flash Endurance**: Wear-leveling parameter store distributes writes across Flash sectors to prevent endurance degradation.
 - **Buffer Safety**: All responses verify output capacity against `ISOTP_TX_BUF_SIZE` to prevent memory corruption.
 - **MISRA C & Zero-Warning**: Typedefs, strict unsigned constant literals (`U`), bounds checks, and zero warnings under strict compiler flags (`-Wall -Wextra -Werror -std=c99 -pedantic`).
+
+## Server Timing & Polling (Issue #146)
+
+The UDS server maintains several time-sensitive state machines:
+- **S3 Server Timeout (5000 ms)**: Automatically resets session back to `DEFAULT` if no tester communication is received.
+- **Security Access Lockout (10 seconds)**: Prevents brute-force key attempts after failed seed/key requests.
+- **ECU Reset Grace Period (50 ms)**: Allows pending positive responses (`0x51`) to be transmitted over CAN before triggering a soft or hard system reset.
+
+To maintain accurate timing on bare-metal microcontrollers (e.g., STM32, RP2350), two integration patterns are supported:
+
+### Option A: Main Loop Superloop Integration (Recommended for bare-metal)
+Call `uds_server_poll_ms(HAL_GetTick())` inside your `while (1)` main loop. It automatically calculates elapsed milliseconds and prevents rapid timer expiration:
+
+```c
+while (1) {
+    /* CAN message processing ... */
+    
+    /* Safely step UDS timers using millisecond ticks */
+    uds_server_poll_ms(HAL_GetTick());
+}
+```
+
+### Option B: 1ms Timer Interrupt / SysTick Callback
+If you have a dedicated 1ms hardware timer interrupt or RTOS tick hook, call `uds_server_poll()` directly:
+
+```c
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (htim->Instance == TIM2) { /* 1ms period */
+        uds_server_poll();
+    }
+}
+```

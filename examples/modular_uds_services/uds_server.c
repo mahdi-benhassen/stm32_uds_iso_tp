@@ -224,6 +224,26 @@ void uds_server_poll(void) {
     uds_reset_poll();
 }
 
+static uint32_t s_last_poll_tick = 0U;
+static bool     s_poll_tick_initialized = false;
+
+void uds_server_poll_ms(uint32_t current_tick_ms) {
+    if (!s_poll_tick_initialized) {
+        s_last_poll_tick = current_tick_ms;
+        s_poll_tick_initialized = true;
+        return;
+    }
+
+    uint32_t elapsed = current_tick_ms - s_last_poll_tick;
+    if (elapsed > 0U) {
+        s_last_poll_tick = current_tick_ms;
+        /* Step internal state machines for each elapsed millisecond */
+        for (uint32_t i = 0U; i < elapsed; i++) {
+            uds_server_poll();
+        }
+    }
+}
+
 /* Dispatch alias functions for backward compatibility */
 void uds_server_dispatch_set_security_level(uint32_t active_level_mask) {
     uds_server_set_security_level(active_level_mask);
