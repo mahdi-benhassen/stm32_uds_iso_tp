@@ -874,6 +874,64 @@ static void test_issue_141_service_29_authentication(void) {
     printf("       Issue #141 passed!\n");
 }
 
+/* ── Test: Issue #143 - 0x10 Diagnostic Session Switch State Machine ── */
+static void test_issue_143_session_jump_fsm(void) {
+    printf("[TEST] Running Issue #143: 0x10 Session Jump State Machine ...\n");
+
+    uds_server_init(NULL);
+    assert(uds_session_get() == UDS_SESSION_DEFAULT);
+
+    uds_response_t resp;
+
+    /* 1. Direct transition from Default (0x01) to Programming (0x02) must be rejected with NRC 0x22 */
+    uint8_t req_prog[2] = { 0x10U, 0x02U };
+    bool ok = uds_server_process(req_prog, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x7FU);
+    assert(resp.data[1] == 0x10U);
+    assert(resp.data[2] == NRC_CONDITIONS_NOT_CORRECT); /* 0x22 */
+    assert(uds_session_get() == UDS_SESSION_DEFAULT);
+
+    /* 2. Transition from Default (0x01) to Extended (0x03) must succeed */
+    uint8_t req_ext[2] = { 0x10U, 0x03U };
+    ok = uds_server_process(req_ext, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x50U);
+    assert(resp.data[1] == 0x03U);
+    assert(uds_session_get() == UDS_SESSION_EXTENDED);
+
+    /* 3. Transition from Extended (0x03) to Programming (0x02) must succeed */
+    ok = uds_server_process(req_prog, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x50U);
+    assert(resp.data[1] == 0x02U);
+    assert(uds_session_get() == UDS_SESSION_PROGRAMMING);
+
+    /* 4. Direct transition from Programming (0x02) to Extended (0x03) is forbidden (NRC 0x22) */
+    ok = uds_server_process(req_ext, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x7FU);
+    assert(resp.data[1] == 0x10U);
+    assert(resp.data[2] == NRC_CONDITIONS_NOT_CORRECT);
+    assert(uds_session_get() == UDS_SESSION_PROGRAMMING);
+
+    /* 5. Transition from Programming (0x02) back to Default (0x01) must succeed */
+    uint8_t req_def[2] = { 0x10U, 0x01U };
+    ok = uds_server_process(req_def, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x50U);
+    assert(resp.data[1] == 0x01U);
+    assert(uds_session_get() == UDS_SESSION_DEFAULT);
+
+    /* 6. Re-entering current session (Default -> Default) must succeed */
+    ok = uds_server_process(req_def, 2U, false, &resp);
+    assert(ok == true);
+    assert(resp.data[0] == 0x50U);
+    assert(resp.data[1] == 0x01U);
+
+    printf("       Issue #143 passed!\n");
+}
+
 int main(void) {
     printf("===================================================\n");
     printf("  Executing Modular UDS Full Verification Suite\n");
@@ -899,6 +957,7 @@ int main(void) {
     test_issue_138_139_security_gate_levels();
     test_issue_140_single_bank_bootloader();
     test_issue_141_service_29_authentication();
+    test_issue_143_session_jump_fsm();
 
     printf("===================================================\n");
     printf("  ALL 19 VERIFICATION TESTS PASSED! (100%% SUCCESS)\n");
