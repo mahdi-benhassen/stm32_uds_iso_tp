@@ -1,6 +1,18 @@
 # Automotive Diagnostic Applications & Examples
 
-This directory provides architecture recommendations, hardware schematics, and software examples for turning the **STM32 UDS ISO-TP** stack into production-grade automotive diagnostic devices, scan tools, and testing equipment.
+This directory provides architecture recommendations, hardware schematics, and software examples for turning the **STM32 UDS ISO-TP** stack into production-grade automotive electronic control units, diagnostic devices, scan tools, and testing equipment.
+
+---
+
+## Production Application Examples in `examples/`
+
+The repository includes 3 fully implemented, runnable application examples demonstrating how real automotive nodes leverage this repo as their **development layer or middleware**:
+
+| Application Example | Domain & Role | Repo Middleware Capabilities Used | Directory |
+|---|---|---|---|
+| **Body Control Module (BCM)** | Vehicle Body & Exterior Lighting ECU | DID telemetry (0x22), I/O Actuator Overrides (0x2F), DTC reporting (0x19/0x14), Routine self-test (0x31) | [`examples/body_control_module_bcm/`](../../examples/body_control_module_bcm/) |
+| **Battery Management System (BMS)** | EV/HEV High-Voltage Battery Pack | High-throughput pack telemetry (0x22), Level 1 Seed/Key Security Gate (0x27), High-Voltage Contactor Routine (0x31), OVP/UVP Safety DTCs (0x19) | [`examples/battery_management_system_bms/`](../../examples/battery_management_system_bms/) |
+| **Telematics Gateway & FOTA Client** | Connected TCU / Diagnostic Master / Flashing Tool | ISO-TP client transport, complete 10-step UDS reprogramming sequence (0x10, 0x85, 0x28, 0x27, 0x31, 0x34, 0x36, 0x37, 0x11) | [`examples/telematics_gateway_fota_client/`](../../examples/telematics_gateway_fota_client/) |
 
 ---
 
@@ -17,7 +29,7 @@ This directory provides architecture recommendations, hardware schematics, and s
 
 ## Key Modules Reused from this Repository
 
-When developing a diagnostic client (tester) using this project, you leverage the following core modules directly:
+When developing an automotive ECU or diagnostic client (tester) using this project, you leverage the following core modules directly:
 
 1. **ISO 15765-2 Transport Engine** ([`library/src/isotp.c`](../../library/src/isotp.c)):
    - Handles multi-frame packet reassembly, flow control negotiation, microsecond/millisecond $ST_{min}$ pacing, and CAN FD 64-byte payloads.

@@ -369,6 +369,12 @@ if(UDS_ISO_TP_BUILD_EXAMPLES)
                      ${CMAKE_CURRENT_BINARY_DIR}/stm32f767_bxcan)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../examples/stm32_fdcan
                      ${CMAKE_CURRENT_BINARY_DIR}/stm32_fdcan)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../examples/body_control_module_bcm
+                     ${CMAKE_CURRENT_BINARY_DIR}/body_control_module_bcm)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../examples/battery_management_system_bms
+                     ${CMAKE_CURRENT_BINARY_DIR}/battery_management_system_bms)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../examples/telematics_gateway_fota_client
+                     ${CMAKE_CURRENT_BINARY_DIR}/telematics_gateway_fota_client)
 endif()
 
 if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
@@ -465,4 +471,8 @@ if(UDS_ISO_TP_BUILD_TESTS AND UDS_ISO_TP_BUILD_EXAMPLES)
         -Wall -Wextra -Wpedantic -Wconversion -Werror)
     add_test(NAME uds_iso_tp_dtc_contract
              COMMAND uds_iso_tp_dtc_test)
+
+    add_test(NAME bcm_application_example_contract COMMAND bcm_application_example)
+    add_test(NAME bms_application_example_contract COMMAND bms_application_example)
+    add_test(NAME fota_client_example_contract COMMAND fota_client_example)
 endif()

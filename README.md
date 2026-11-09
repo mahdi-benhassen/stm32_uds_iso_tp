@@ -62,6 +62,14 @@ The generated STM32F767 project at the repository root is now a minimal UDS-only
 
 The reusable bindings are documented in [`examples/stm32f767_bxcan/`](examples/stm32f767_bxcan/) and [`examples/stm32_fdcan/`](examples/stm32_fdcan/). The FDCAN example deliberately remains a contract rather than an invented vendor-generated board project.
 
+## Production Application Examples
+
+The [`examples/`](examples/) directory provides full runnable application architectures demonstrating how this repository serves as an embedded middleware layer:
+
+- **[Body Control Module (BCM)](examples/body_control_module_bcm/)**: Automotive body controller implementing live sensor DIDs (`0x22`), active I/O actuator overrides (`0x2F`), DTC reporting and clearing (`0x19` / `0x14`), and routine self-tests (`0x31`).
+- **[Battery Management System (BMS)](examples/battery_management_system_bms/)**: High-voltage EV battery pack node with pack telemetry DIDs (`0x22`), Level 1 Seed/Key SecurityAccess (`0x27`), protected contactor cycling (`0x31`), and safety critical OVP/UVP DTCs (`0x19`).
+- **[Telematics Gateway & FOTA Client](examples/telematics_gateway_fota_client/)**: Connected TCU and vehicle flashing master driving a complete 10-step ISO 14229 reprogramming sequence across ISO-TP (`0x10`, `0x85`, `0x28`, `0x27`, `0x31`, `0x34`, `0x36`, `0x37`, `0x11`).
+
 ## Documentation
 
 | Topic | Document |
