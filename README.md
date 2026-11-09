@@ -30,6 +30,19 @@ The authoritative implementation is in [`library/include/uds_iso_tp/`](library/i
 
 The default library payload bound is 16,384 bytes and all buffers are static. The transport can carry a 5,000-byte extended First Frame. The UDS dispatcher remains separately bounded by its documented `uint16_t` callback API.
 
+## Release Roadmap & GitHub Milestones
+
+Project deliverables, ISO protocol compliance, and target porting stages are tracked using [GitHub Milestones](https://github.com/mahdi-benhassen/stm32_uds_iso_tp/milestones):
+
+- **[Milestone #1: v1.1.0 - Modular UDS Diagnostic Services & Core Stack](https://github.com/mahdi-benhassen/stm32_uds_iso_tp/milestone/1)** `[100% Complete]`
+  Modular ISO 14229-1 service dispatchers, session transition state machine (0x10), DTC engine (0x14, 0x19 0x01..0x15), and superloop polling.
+- **[Milestone #2: v1.2.0 - Multi-MCU Hardware Abstraction & CAN-FD Transport](https://github.com/mahdi-benhassen/stm32_uds_iso_tp/milestone/2)** `[100% Complete]`
+  Cross-platform HAL abstraction, STM32F767 / STM32F103 / STM32C092 target support, 64-byte CAN-FD framing, and non-blocking ISR ring buffer.
+- **[Milestone #3: v2.0.0 - Automotive Cybersecurity & FOTA Bootloader Architecture](https://github.com/mahdi-benhassen/stm32_uds_iso_tp/milestone/3)** `[Active Roadmap]`
+  ISO 21434 automotive security, Level 2 AES-CMAC-128 SecurityAccess (0x27), Authentication (0x29), Flash NVM wear-leveling, and Dual-Bank A/B FOTA Bootloader.
+
+Detailed engineering practices, CI checks, and CLI automation are documented in [`docs/GITHUB_MILESTONES.md`](docs/GITHUB_MILESTONES.md).
+
 ## Build and test the library
 
 ```sh
@@ -56,6 +69,7 @@ The reusable bindings are documented in [`examples/stm32f767_bxcan/`](examples/s
 | CANopen removal audit | [`docs/architecture/canopen_removal_audit.md`](docs/architecture/canopen_removal_audit.md) |
 | Library architecture | [`docs/standalone/architecture.md`](docs/standalone/architecture.md) |
 | Classical CAN and CAN-FD ISO-TP | [`docs/standalone/isotp.md`](docs/standalone/isotp.md) |
+| GitHub Milestones & Release Tracking | [`docs/GITHUB_MILESTONES.md`](docs/GITHUB_MILESTONES.md) |
 | STM32 examples | [`docs/standalone/stm32_examples.md`](docs/standalone/stm32_examples.md) |
 | Diagnostic device applications | [`docs/applications/README.md`](docs/applications/README.md) |
 | HIL and CAN-FD evidence | [`docs/standalone/hil.md`](docs/standalone/hil.md) |

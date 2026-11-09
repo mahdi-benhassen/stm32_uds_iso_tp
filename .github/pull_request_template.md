@@ -1,5 +1,10 @@
 Describe the change and why it is needed.
 
+## Milestone & Issue Tracking
+
+- [ ] Target Milestone assigned (e.g., `v1.2.0`, `v2.0.0`)
+- Fixes / Relates to issue: #
+
 ## Scope
 
 - [ ] ISO-TP transport behavior

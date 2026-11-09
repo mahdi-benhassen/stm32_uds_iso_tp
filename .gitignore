@@ -59,3 +59,6 @@ build-flow-sanitize/
 build-flow-reports/
 build-root-clean/
 scratch/
+.agents/
+artifacts/
+repo_workspace/

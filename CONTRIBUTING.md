@@ -8,6 +8,17 @@ Read the [README](README.md), [BUILD.md](BUILD.md), [PRODUCT_SCOPE.md](PRODUCT_S
 
 Do not commit secrets, private keys, vendor credentials, proprietary board files, generated build output, or an unmanaged vendor SDK. Keep protocol behavior in `library/`, target bindings in `examples/` or the application adapter, and platform-specific policy in application-owned files.
 
+## Milestone & Issue Tracking
+
+All pull requests and issues should map to an active [GitHub Milestone](docs/GITHUB_MILESTONES.md):
+- Confirm the target milestone with the project maintainers (e.g., `v1.2.0`, `v2.0.0`).
+- Ensure every PR references its parent issue and specifies its target milestone in the PR description or sidebar.
+- You can query milestones and generate changelogs locally using:
+  ```sh
+  python tools/github_milestone_manager.py list
+  python tools/github_milestone_manager.py report --milestone <number>
+  ```
+
 ## Development workflow
 
 Create a topic branch from `main`, make one logically complete change at a time, add deterministic tests for pure logic and source contracts, run the host and relevant target validation, and update documentation when public behavior changes. A change must not introduce a hidden protocol dependency or a new blocking path in an interrupt handler.
@@ -43,4 +54,4 @@ Use imperative scoped subjects such as `fix(isotp): reject reserved STmin`, `tes
 
 ## Review and merge requirements
 
-A change is ready for merge when deterministic tests pass, the affected target build succeeds, `git diff --check` is clean, documentation is updated, and reviewers understand any hardware or conformance limitations. Changes involving Flash, reset, security, or board safety require explicit product-owner review before release use.
+A change is ready for merge when deterministic tests pass, the affected target build succeeds, `git diff --check` is clean, documentation is updated, the target milestone is assigned, and reviewers understand any hardware or conformance limitations. Changes involving Flash, reset, security, or board safety require explicit product-owner review before release use.
